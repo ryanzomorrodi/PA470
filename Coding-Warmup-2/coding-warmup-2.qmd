@@ -1,0 +1,204 @@
+---
+title: "Coding Warmup 2"
+author: "Ryan Zomorrodi"
+format: 
+    html:
+        toc: true
+        theme: sandstone
+        code-fold: true
+execute:
+    warning: false
+    error: false
+---
+
+## Part 1
+Create an RMarkdown file to use for this assignment. Use html as the output and change at least one option in the yaml. Complete the rest of the assignment using markdown and chunks to create readable code and output.
+
+## Part 2
+Using [censusreporter.org](https://censusreporter.org/), pick an American Community Survey variable and a geographic area and division (e.g. nationwide and states, statewide and county, county and tracts).
+
+Using `tigris`, `tidycensus`, and `leaflet` (encouraged, or your favorite R package for maps), map the variable over your chosen geographic divisions. Select an appropriate pallete, and consider adding popup labels. Write a few sentences describing your map in Markdown
+``` {r}
+#| output: false
+library(leaflet)
+library(sf)
+library(tidyverse)
+library(tidycensus)
+
+acs_il20 <- get_acs(geography = "tract", 
+    variables = c(
+        medincome = "B19013_001",
+        totalpop = "B02001_001",
+        white_nh = "B03002_003",
+        black_nh = "B03002_004",
+        aian_nh = "B03002_005",
+        asian_nh = "B03002_005",
+        hispanic = "B03002_012"),
+    state = "IL", 
+    year = 2020) %>%
+    pivot_wider(names_from = variable, values_from = c(estimate, moe)) %>%
+    select(GEOID, starts_with("estimate"))
+
+tracts_il20 <- tigris::tracts(state = "IL", year = 2020) %>% 
+    st_transform(4326)
+
+acs_il20 <- tracts_il20 %>%
+    left_join(acs_il20)
+
+chi20 <- tigris::county_subdivisions(state = "IL", county = "Cook", year = 2020) %>%
+    filter(NAME == "Chicago") %>% 
+    st_transform(4326)
+
+acs_chi20 <- acs_il20 %>%
+    st_intersection(chi20)
+```
+
+``` {r}
+pal <- colorQuantile("Greens", 
+    domain = acs_chi20$estimate_medincome,
+    n = 5)
+
+leaflet() %>%
+    addProviderTiles(providers$CartoDB.Positron) %>% 
+    addPolygons(
+        data = acs_chi20,
+        fillColor = ~ pal(estimate_medincome),
+        fillOpacity = 0.7,
+        color = "Black",
+        weight = 0.5,
+        opacity = 0.5,
+        highlightOptions = highlightOptions(
+            weight = 2,
+            color = "Black",
+            fillOpacity = 1,
+            bringToFront = TRUE),
+        label = sprintf(
+            "<strong>Tract %s</strong><br>Median Income: %s<br/>",
+            acs_chi20$GEOID,
+            scales::dollar(acs_chi20$estimate_medincome)) %>% 
+                lapply(htmltools::HTML),
+        labelOptions = labelOptions(
+            style = list("font-weight" = "normal", padding = "3px 8px"),
+            textsize = "12px",
+            direction = "auto")) %>%
+    addLegend(
+        pal = pal,
+        values = acs_chi20$estimate_medincome,
+        opacity = 0.7,
+        title = NULL,
+        position = "bottomright",
+        na.label = "Insufficient Data")
+```
+
+## Part 3
+Consider expanding the divvy example from class with the following:  
+
+* approximate trip distance from start/end location  
+* show some summary stats by hour or day of week or community area or “rideable” type  
+* construct a regression with some combination of the above  
+
+``` {r}
+temp <- tempfile()
+download.file("https://divvy-tripdata.s3.amazonaws.com/202307-divvy-tripdata.zip", temp)
+divvy202307 <- read_csv(unz(temp, "202307-divvy-tripdata.csv"))
+unlink(temp)
+```
+
+``` {r}
+library(sfheaders)
+library(units)
+
+divvy202307_sf <- divvy202307 %>%
+    filter(!is.na(end_lat)) %>%
+    filter(start_lng != end_lng & start_lat != end_lat) %>%
+    pivot_longer(c(start_lat, start_lng, end_lat, end_lng), names_to = c("Position", ".value"), names_pattern = "(.*)_(.*)") %>%
+    sf_linestring(linestring_id = "ride_id", x = "lng", y = "lat", keep = TRUE) %>%
+    st_set_crs(4326) %>%
+    st_transform(26971) %>%
+    mutate(edistance = set_units(st_length(geometry), mi)) %>%
+    mutate(start_time = force_tz(started_at, tzone = "America/Chicago")) %>%
+    mutate(end_time = force_tz(ended_at, tzone = "America/Chicago")) %>%
+    mutate(duration_time = end_time - start_time)
+```
+
+``` {r}
+divvy202307_sf %>%
+    st_drop_geometry() %>%
+    ggplot() + 
+        geom_density(aes(x = edistance, fill = rideable_type, y = after_stat(count)), alpha = 0.5) + 
+        labs(x = 'Euclidian Trip Distance',
+            y = 'Rides',
+            title = 'Divvy Euclidian Distances - July 2023') +
+        scale_fill_discrete(name = "Ride Type",
+            labels = c("Classic", "Docked", "Electric"))
+```
+
+``` {r}
+divvy202307_sf %>%
+    st_drop_geometry() %>%
+    ggplot() + 
+        geom_density(aes(x = duration_time, fill = rideable_type, y = after_stat(count)), alpha = 0.5) + 
+        xlim(0, 7200) +
+        labs(x = 'Trip Duration [sec]',
+            y = 'Rides',
+            title = 'Divvy Trip Duration - July 2023') +
+        scale_fill_discrete(name = "Ride Type",
+            labels = c("Classic", "Docked", "Electric"))
+```
+
+``` {r}
+divvy202307_sf %>%
+    st_drop_geometry() %>%
+    mutate(day = wday(started_at, label = TRUE)) %>%
+    ggplot() +
+        geom_bar(aes(day, fill = rideable_type)) +
+        labs(x = 'Day of the Week',
+            y = 'Rides',
+            title = 'Divvy Trips by Day of the Week - July 2023') +
+        scale_fill_discrete(name = "Ride Type",
+            labels = c("Classic", "Docked", "Electric"))
+```
+
+``` {r}
+divvy202307_sf %>%
+    st_drop_geometry() %>%
+    mutate(day = wday(started_at, label = TRUE)) %>%
+    mutate(hour = hour(started_at)) %>%
+    ggplot() +
+        geom_bar(aes(hour, fill = rideable_type)) +
+        labs(x = 'Hour',
+            y = 'Rides',
+            title = 'Divvy Trips by Hour for Each Day of the Week - July 2023') +
+        scale_fill_discrete(name = "Ride Type",
+            labels = c("Classic", "Docked", "Electric")) +
+        facet_grid(rows = vars(day))
+```
+
+## Part 4  
+Grab another variable for the same geographic area and divisions with the intent of exploring correlation between this variable and the one selected in the part 2. Replicate some of the analysis from [Tidy Modeling Sec 3.1](https://www.tmwr.org/base-r.html#an-example).
+
+``` {r}
+acs_il20 %>%
+    filter(str_starts(GEOID, "17031")) %>%
+    mutate(white_nh_pct = estimate_white_nh / estimate_totalpop) %>%
+    ggplot(aes(x = white_nh_pct, y = estimate_medincome)) +
+        geom_point(alpha=.2) +
+        geom_smooth(method = lm) +
+        theme_bw() +
+        scale_y_continuous(labels = scales::dollar_format()) +
+        scale_x_continuous(labels = scales::percent_format()) +
+        labs(x='Percent White Non-Hispanic', y='Median Income', title='Median Income and Percent White Non-Hispanic by Census Tract \nin Cook County')
+```
+
+``` {r}
+lm_white_medincome <- acs_il20 %>%
+    filter(str_starts(GEOID, "17031")) %>%
+    mutate(white_nh_pct = estimate_white_nh / estimate_totalpop) %>%
+    lm(estimate_medincome ~ white_nh_pct, data = .)
+
+summary(lm_white_medincome)
+```
+
+``` {r}
+plot(lm_white_medincome)
+```
