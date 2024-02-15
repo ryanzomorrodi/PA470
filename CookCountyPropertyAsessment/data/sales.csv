@@ -1,0 +1,20 @@
+Column Name,Description,Type
+pin,Parcel Identification Number (PIN),Plain Text
+year,Year,Number
+township_code,Township code,Plain Text
+neighborhood_code,"Assessor neighborhood code, first two digits are township, last three are neighborhood",Plain Text
+class,Property class,Plain Text
+sale_date,"Sale date (recorded, not executed)",Date & Time
+is_mydec_date,Indicates whether the sale date has been overwritten with a more precise value from IDOR (Illinois Department of Revenue). In the past the Assessor's ingest process truncated sale dates to the first of the month. Not all sales can be updated with dates from IDOR.,Checkbox
+sale_price,Sale price,Number
+sale_document_num,Sale document number. Corresponds to Clerk's document number,Plain Text
+sale_deed_type,Sale deed type,Plain Text
+mydec_deed_type,"Deed type from MyDec, more granular than CCAO deed type.",Plain Text
+sale_seller_name,Sale seller name,Plain Text
+is_multisale,Indicates whether a parcel was sold individually or as part of a larger group of PINs,Checkbox
+num_parcels_sale,The number of parcels that were part of the sale,Number
+sale_buyer_name,Sale buyer name,Plain Text
+sale_type,Sale type,Plain Text
+sale_filter_same_sale_within_365,Remove sale with the same value (for the same PIN) within 365 days,Checkbox
+sale_filter_less_than_10k,Indicator for whether sale is less than $10K FMW,Checkbox
+sale_filter_deed_type,"Indicator for quit claim, executor, beneficiary and missing deed types",Checkbox
