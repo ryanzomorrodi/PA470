@@ -6,6 +6,7 @@ format:
         toc: true
         theme: sandstone
         code-fold: true
+        embed-resources: true
 execute:
     warning: false
     error: false
