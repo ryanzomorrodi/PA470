@@ -1,0 +1,100 @@
+---
+title: "Coding Warmup 4"
+author: "Ryan Zomorrodi"
+date:  02/15/2024
+categories: ["Coding Warmup"]
+format: 
+    html:
+        toc: true
+        code-fold: true
+        embed-resources: true
+execute:
+    warning: false
+    error: false
+---
+
+## Part A
+We are going to use a toy dataset called bivariate. There is a training, testing, and validation dataset provided.
+```{r}
+library(tidyverse)
+library(tidymodels)
+
+data(bivariate)
+
+ggplot(bivariate_train, aes(x = A, y = B, color = Class)) +
+    geom_point()
+```
+
+Use `logistic_reg` and `glm` to make a classification model of Class ~ A * B. Then use tidy and glance to see some summary information on our model. Anything stand out to you?
+
+``` {r}
+log_model <- logistic_reg() %>%
+    set_engine('glm') %>%
+    set_mode('classification') %>%
+    fit(Class ~ A * B, data = bivariate_train)
+
+log_model %>% tidy()
+
+log_model %>% glance()
+```
+
+## Part B
+Use augment to get predictions. Look at the predictions.
+``` {r}
+log_model %>% augment(bivariate_test)
+```
+
+## Part C
+Visually inspect the predictions using the code below
+
+```{r}
+preds <- expand.grid(
+    A = seq(min(bivariate_train$A), max(bivariate_train$A), length.out = 100),
+    B = seq(min(bivariate_train$B), max(bivariate_train$B), length.out = 100)) %>%
+    augment(log_model, .)
+
+ggplot(preds, aes(x = A, y = B)) +
+    geom_contour(aes(z = .pred_One), breaks = .5, col = "black") + 
+    geom_point(data = bivariate_val, aes(col = Class), alpha = 0.3)
+```
+
+## Part D
+Evaluate your model using the following functions (which dataset(s) should you use to do this train, test, or validation). See if you can provide a basic interpretation of the measures.
+
+* roc_auc
+* accuracy
+* roc_curve and autoplot
+* f_meas
+``` {r}
+val_preds <- log_model %>% 
+    augment(bivariate_val)
+
+metrics <- list(
+    val_preds %>%
+        roc_auc(Class, .pred_One),
+    val_preds %>%
+        accuracy(Class, .pred_class),
+    val_preds %>%
+        f_meas(Class, .pred_class))
+
+metrics %>% bind_rows()
+```
+
+``` {r}
+val_preds %>% 
+    roc_curve(Class, .pred_One) %>%
+    autoplot()
+```
+
+## Part E
+Recall Table 8.4 from the textbook. If necessary, class one can be positive and class two can be negative. Using the output from conf_mat, visually verify you know how to calculate the following:
+
+* True Positive Rate (TPR), Sensitivity, or Recall
+* True Negative Rate (TNR) or Specificity
+* False Positive Rate, Type I error
+* False Negative Rate (FNR), Type II error
+* Positive Predictive Value (PPV) or Precision
+```{r}
+val_preds %>% 
+    conf_mat(truth = Class, estimate = .pred_class)
+```

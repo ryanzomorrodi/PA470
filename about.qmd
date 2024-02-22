@@ -1,0 +1,15 @@
+---
+title: "About"
+about:
+  template: jolla
+  links:
+    - icon: linkedin
+      text: LinkedIn
+      href: https://www.linkedin.com/in/ryanzomorrodi
+    - icon: github
+      text: Github
+      href: https://github.com/ryanzomorrodi
+
+---
+
+This repository houses the code submitted by me (Ryan Zomorrodi) for the [Spring 2024 PA470 Course](https://pa470spring2024.netlify.app/).
