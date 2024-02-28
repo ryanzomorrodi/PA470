@@ -1,0 +1,949 @@
+---
+title: "Cook County Property Assessment - Part 2"
+author: "Ryan Zomorrodi"
+date:  last-modified
+categories: ["Cook County Assessments"]
+format: 
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  warning: false
+  error: false
+csl: ieee.csl
+
+references:
+- id: cookCountyAssessors
+  type: no-type
+  accessed:
+  - year: 2024
+    month: 2
+    day: 17
+  title: How Properties are Valued
+  container-title: Cook County Assessor’s Office
+  note: 'publisher:'
+  URL: https://www.cookcountyassessor.com/how-properties-are-valued
+---
+
+## Part A
+
+There are over 1.8 million parcels in Cook County, Illinois [@cookCountyAssessors]. Each of these parcels is assessed every three years using three to five years of prior sales information [@cookCountyAssessors]. For this analysis, we will take a look at single family home assessments within three of the 36 political townships: Lemont (19), Palos (30), Orland (28). Using data provided on the Cook County data portal, we will will create a series of two models. Our first model will predict the likelihood of overassessment for the year of 2022, and our second model will predict home value for the year of 2023.
+
+### Inclusion Criteria
+
+We have 4 inclusion criteria:
+
+-   Year - 2021, 2022, 2023
+
+-   Class - 202, 203, 204, 205, 206, 207, 208, 209, 210, 234, 278. These conform to single family homes
+
+-   Township Code - 19 (Lemont), 30 (Palos), 28 (Orland)
+
+-   Is Multisale - No
+
+```{r}
+#| eval: false
+library(arrow)
+library(data.table)
+library(dtplyr)
+library(tidyverse)
+
+sfh2123_assessment <-
+  open_csv_dataset("../data/20240217_Assessed_Values.csv",
+    skip = 1,
+    na = c("", "[]", "NA"),
+    schema(
+      field("pin", string()),
+      field("tax_year", int32()),
+      field("class", string()),
+      field("township_code", string()),
+      field("township_name", string()),
+      field("mailed_bldg", int32()),
+      field("mailed_land", int32()),
+      field("mailed_tot", int32()),
+      field("certified_bldg", int32()),
+      field("certified_land", int32()),
+      field("certified_tot", int32()),
+      field("board_bldg", int32()),
+      field("board_land", int32()),
+      field("board_tot", int32()),
+    )
+  ) %>%
+  filter(tax_year %in% c(2021, 2022, 2023)) %>%
+  filter(class %in% c("202", "203", "204", "205", "206", "207", "208", "209", "210", "234", "278")) %>% 
+  filter(township_code %in% c("19", "30", "28"))
+
+sfh2123_sales <- 
+  open_csv_dataset("../data/20240217_Parcel_Sales.csv",
+    skip = 1,
+    na = c("", "[]", "NA"),
+    schema(
+      field("pin", string()),
+      field("year", int32()),
+      field("township_code", string()),
+      field("neighborhood_code", string()),
+      field("class", string()),
+      field("sale_date", string()),
+      field("is_mydec_date", bool()),
+      field("sale_price", int32()),
+      field("sale_document_num", string()),
+      field("sale_deed_type", string()),
+      field("mydec_deed_type", string()),
+      field("sale_seller_name", string()),
+      field("is_multisale", bool()),
+      field("num_parcels_sale", int32()),
+      field("sale_buyer_name", string()),
+      field("sale_type", string()),
+      field("sale_filter_same_sale_within_365", bool()),
+      field("sale_filter_less_than_10k", bool()),
+      field("sale_filter_deed_type", bool())
+    )
+  ) %>%
+  filter(year %in% c(2021, 2022, 2023)) %>%
+  filter(class %in% c("202", "203", "204", "205", "206", "207", "208", "209", "210", "234", "278")) %>% 
+  filter(township_code %in% c("19", "30", "28")) %>%
+  filter(!is_multisale) 
+
+sfh2123_characteristics <- 
+  open_csv_dataset("../data/20240217_Improvement_Characteristics.csv",
+    skip = 1,
+    na = c("", "[]", "NA"),
+    schema(
+      field("pin", string()),
+      field("tax_year", int32()),
+      field("card_num", string()),
+      field("class", string()),
+      field("township_code", string()),
+      field("proration_key_pin", string()),
+      field("pin_proration_rate", double()),
+      field("card_proration_rate", double()),
+      field("cdu", string()),
+      field("pin_is_multicard", bool()),
+      field("pin_num_cards", int32()),
+      field("pin_is_multiland", bool()),
+      field("pin_num_landlines", int32()),
+      field("year_built", int32()),
+      field("building_sqft", int32()),
+      field("land_sqft", int32()),
+      field("num_bedrooms", int32()),
+      field("num_rooms", int32()),
+      field("num_full_baths", int32()),
+      field("num_half_baths", int32()),
+      field("num_fireplaces", int32()),
+      field("type_of_residence", string()),
+      field("construction_quality", string()),
+      field("num_apartments", string()),
+      field("attic_finish", string()),
+      field("garage_attached", string()),
+      field("garage_area_included", string()),
+      field("garage_size", string()),
+      field("garage_ext_wall_material", string()),
+      field("attic_type", string()),
+      field("basement_type", string()),
+      field("ext_wall_material", string()),
+      field("central_heating", string()),
+      field("repair_condition", string()),
+      field("basement_finish", string()),
+      field("roof_material", string()),
+      field("single_v_multi_family", string()),
+      field("site_desirability", string()),
+      field("num_commercial_units", string()),
+      field("renovation", string()),
+      field("recent_renovation", bool()),
+      field("porch", string()),
+      field("central_air", string()),
+      field("design_plan", string())
+    )
+  ) %>%
+  filter(tax_year %in% c(2021, 2022, 2023)) %>%
+  filter(class %in% c("202", "203", "204", "205", "206", "207", "208", "209", "210", "234", "278")) %>% 
+  filter(township_code %in% c("19", "30", "28"))
+
+sfh2123_universe <- 
+  open_csv_dataset("../data/20240217_Parcel_Universe.csv",
+    skip = 1,
+    na = c("", "[]", "NA"),
+    schema(
+      field("pin", string()),
+      field("pin10", string()),
+      field("tax_year", int32()),
+      field("class", string()),
+      field("triad_name", string()),
+      field("triad_code", string()),
+      field("township_name", string()),
+      field("township_code", string()),
+      field("neighborhood_code", string()),
+      field("tax_district_code", string()),
+      field("zip_code", string()),
+      field("longitude", double()),
+      field("latitude", double()),
+      field("centroid_x_crs_3435", double()),
+      field("centroid_y_crs_3435", double()),
+      field("census_block_group_geoid", string()),
+      field("census_block_geoid", string()),
+      field("census_congressional_district_geoid", string()),
+      field("census_county_subdivision_geoid", string()),
+      field("census_place_geoid", string()),
+      field("census_puma_geoid", string()),
+      field("census_school_district_elementary_geoid", string()),
+      field("census_school_district_secondary_geoid", string()),
+      field("census_school_district_unified_geoid", string()),
+      field("census_state_representative_geoid", string()),
+      field("census_state_senate_geoid", string()),
+      field("census_tract_geoid", string()),
+      field("census_zcta_geoid", string()),
+      field("census_data_year", int32()),
+      field("census_acs5_congressional_district_geoid", string()),
+      field("census_acs5_county_subdivision_geoid", string()),
+      field("census_acs5_place_geoid", string()),
+      field("census_acs5_puma_geoid", string()),
+      field("census_acs5_school_district_elementary_geoid", string()),
+      field("census_acs5_school_district_secondary_geoid", string()),
+      field("census_acs5_school_district_unified_geoid", string()),
+      field("census_acs5_state_representative_geoid", string()),
+      field("census_acs5_state_senate_geoid", string()),
+      field("census_acs5_tract_geoid", string()),
+      field("census_acs5_data_year", int32()),
+      field("board_of_review_district_num", string()),
+      field("board_of_review_district_data_year", int32()),
+      field("commissioner_district_num", string()),
+      field("commissioner_district_data_year", int32()),
+      field("judicial_district_num", string()),
+      field("judicial_district_data_year", int32()),
+      field("ward_num", string()),
+      field("ward_chicago_data_year", int32()),
+      field("ward_evanston_data_year", int32()),
+      field("chicago_community_area_num", string()),
+      field("chicago_community_area_name", string()),
+      field("chicago_community_area_data_year", int32()),
+      field("chicago_industrial_corridor_num", string()),
+      field("chicago_industrial_corridor_name", string()),
+      field("chicago_industrial_corridor_data_year", int32()),
+      field("chicago_police_district_num", string()),
+      field("chicago_police_district_data_year", int32()),
+      field("coordinated_care_area_num", string()),
+      field("coordinated_care_area_data_year", int32()),
+      field("enterprise_zone_num", string()),
+      field("enterprise_zone_data_year", int32()),
+      field("industrial_growth_zone_num", string()),
+      field("industrial_growth_zone_data_year", int32()),
+      field("qualified_opportunity_zone_num", string()),
+      field("qualified_opportunity_zone_data_year", int32()),
+      field("flood_fema_sfha", bool()),
+      field("flood_fema_data_year", int32()),
+      field("flood_fs_factor", int32()),
+      field("flood_fs_risk_direction", int32()),
+      field("flood_fs_data_year", int32()),
+      field("ohare_noise_contour_no_buffer_bool", bool()),
+      field("ohare_noise_contour_half_mile_buffer_bool", bool()),
+      field("ohare_noise_contour_data_year", int32()),
+      field("airport_noise_dnl", double()),
+      field("airport_noise_data_year", string()),
+      field("school_elementary_district_geoid", string()),
+      field("school_elementary_district_name", string()),
+      field("school_secondary_district_geoid", string()),
+      field("school_secondary_district_name", string()),
+      field("school_unified_district_geoid", string()),
+      field("school_unified_district_name", string()),
+      field("school_year", string()),
+      field("school_data_year", int32()),
+      field("tax_municipality_num", string()),
+      field("tax_municipality_name", string()),
+      field("tax_school_elementary_district_num", string()),
+      field("tax_school_elementary_district_name", string()),
+      field("tax_school_secondary_district_num", string()),
+      field("tax_school_secondary_district_name", string()),
+      field("tax_school_unified_district_num", string()),
+      field("tax_school_unified_district_name", string()),
+      field("tax_community_college_district_num", string()),
+      field("tax_community_college_district_name", string()),
+      field("tax_fire_protection_district_num", string()),
+      field("tax_fire_protection_district_name", string()),
+      field("tax_library_district_num", string()),
+      field("tax_library_district_name", string()),
+      field("tax_park_district_num", string()),
+      field("tax_park_district_name", string()),
+      field("tax_sanitation_district_num", string()),
+      field("tax_sanitation_district_name", string()),
+      field("tax_special_service_area_num", string()),
+      field("tax_special_service_area_name", string()),
+      field("tax_tif_district_num", string()),
+      field("tax_tif_district_name", string()),
+      field("tax_districts_data_year", int32()),
+      field("cmap_walkability_grid_id", string()),
+      field("cmap_walkability_no_transit_score", double()),
+      field("cmap_walkability_total_score", double()),
+      field("cmap_walkability_data_year", int32()),
+      field("subdivision_id", string()),
+      field("subdivision_data_year", int32())
+    )
+  ) %>%
+  filter(tax_year %in% c(2021, 2022, 2023)) %>%
+  filter(class %in% c("202", "203", "204", "205", "206", "207", "208", "209", "210", "234", "278")) %>% 
+  filter(township_code %in% c("19", "30", "28"))
+
+sfh2123_assessment_dt <- sfh2123_assessment %>% as.data.table()
+sfh2123_sales_dt <- sfh2123_sales %>% as.data.table()
+sfh2123_characteristics_dt <- sfh2123_characteristics %>% as.data.table()
+sfh2123_universe_dt <- sfh2123_universe %>% as.data.table()
+```
+
+```{r}
+#| eval: false
+#| include: false
+save(sfh2123_assessment_dt, sfh2123_sales_dt, sfh2123_characteristics_dt, sfh2123_universe_dt, file = "data.RData")
+```
+
+```{r}
+#| include: false
+library(tidyverse)
+library(data.table)
+library(dtplyr)
+
+load("data.RData")
+```
+
+### Data Joining
+
+```{r}
+sfh2123_sales_AT <- sfh2123_sales_dt %>%
+  lazy_dt() %>%
+  left_join(sfh2123_assessment_dt, by = c("pin", "township_code", "class", "year" = "tax_year")) %>% 
+  left_join(sfh2123_characteristics_dt, by = c("pin", "township_code", "class", "year" = "tax_year")) %>% 
+  left_join(sfh2123_universe_dt, by = c("pin", "neighborhood_code", "township_code", "township_name", "class", "year" = "tax_year")) %>%
+  mutate(sale_price_ratio = 10 * certified_tot / sale_price) %>%
+  collect()
+
+sfh2123_assessment_AT <- sfh2123_assessment_dt %>% 
+  lazy_dt() %>%
+  left_join(sfh2123_characteristics_dt, by = c("pin", "township_code", "class", "tax_year")) %>% 
+  left_join(sfh2123_universe_dt, by = c("pin", "township_code", "township_name", "class", "tax_year")) %>%
+  collect()
+```
+
+### Check For Missingness
+
+```{r}
+#| fig-height: 18
+#| fig-width: 8
+library(ggplot2)
+
+sfh2123_sales_AT %>%
+  mutate(id = row_number()) %>%
+  tidyr::gather(-id, key = "key", value = "val") %>%
+  mutate(isna = is.na(val)) %>%
+  ggplot(aes(key, id, fill = isna)) +
+    geom_raster(alpha=0.8) +
+    scale_fill_manual(name = "",
+        values = c('steelblue', 'tomato3'),
+        labels = c("Present", "Missing")) +
+    labs(x = "Variable",
+           y = "Row Number", title = "Missing Values for Housing Sales") +
+    coord_flip()
+```
+
+It seems like we have quite a few measures that are either entirely missing or have quite a few missing values. This is okay because we won't be using all of our variables in order to reduce the complexity and increase the interpretability of our model.
+
+### Check For Correlation
+
+```{r}
+library(corrr)
+
+sfh2123_sales_AT %>%
+  select(c(sale_price, certified_tot, year_built, building_sqft, land_sqft, num_bedrooms, num_rooms, num_full_baths, num_half_baths, num_fireplaces, cmap_walkability_no_transit_score, cmap_walkability_total_score)) %>%
+  select(where(is.numeric)) %>%
+  select(where(function(x) sum(!is.na(x)) != 0)) %>%
+  select(where(function(x) var(x, na.rm = TRUE) != 0)) %>% 
+  correlate(method = "spearman") %>%
+  autoplot()
+```
+
+There seems to be a high level of correlation between many of the housing characteristics. Perhaps using a model that takes in account multicollinearity would be a good idea.
+
+### Investigating Our Variables
+
+::: panel-tabset
+## Year Built
+
+```{r}
+library(scales)
+
+sfh2123_sales_AT %>%
+  ggplot(aes(x = year_built, y = sale_price)) +
+    geom_point(size = 0.1) +
+    geom_smooth(method = "gam", color = "springgreen4") +
+    scale_y_continuous(labels = label_currency()) + 
+    labs(
+      title = "Single Family Home Year Built \nand Sale Price in Cook County, IL", 
+      x = "Year Built", 
+      y = "Sale Price"
+    ) +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+More recently built houses seem to sell for more
+
+## Building SqFt
+
+```{r}
+sfh2123_sales_AT %>%
+  ggplot(aes(x = building_sqft, y = sale_price)) +
+    geom_point(size = 0.1) +
+    geom_smooth(method = "gam", color = "springgreen4") +
+    scale_y_continuous(labels = label_currency()) + 
+    labs(
+      title = "Single Family Home Building Square Footage \nand Sale Price in Cook County, IL", 
+      x = "Building Square Footage", 
+      y = "Sale Price"
+    ) +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+Larger building houses tend to sell for more
+
+## Land SqFt
+
+```{r}
+sfh2123_sales_AT %>%
+  ggplot(aes(x = land_sqft, y = sale_price)) +
+    geom_point(size = 0.1) +
+    geom_smooth(method = "gam", color = "springgreen4") +
+    scale_y_continuous(labels = label_currency()) + 
+    labs(
+      title = "Single Family Home Land Square Footage \nand Sale Price in Cook County, IL", 
+      x = "Land Square Footage", 
+      y = "Sale Price"
+    ) +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+The relationship here isn't entirely clear, but it seems that more land sells for more, up until some point
+
+## Beds
+
+```{r}
+sfh2123_sales_AT %>%
+  ggplot() +
+    geom_boxplot(aes(x = num_bedrooms, y = sale_price, fill = factor(num_bedrooms))) +
+    scale_x_continuous(n.breaks = 9) +
+    scale_y_continuous(labels = label_currency()) +
+    labs(
+      title = "Single Family Home Number of Bedrooms \nand Sale Price in Cook County, IL", 
+      x = "Number of Bedrooms", 
+      y = "Sale Price"
+    ) + 
+    theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+Houses with more bedrooms tend to sell for more
+
+## Rooms
+
+```{r}
+sfh2123_sales_AT %>%
+  ggplot() +
+    geom_boxplot(aes(x = num_rooms, y = sale_price, fill = factor(num_rooms))) +
+    geom_smooth(aes(x = num_rooms, y = sale_price), method = "gam", color = "black") +
+    scale_x_continuous(n.breaks = 20) +
+    scale_y_continuous(labels = label_currency()) +
+    labs(
+      title = "Single Family Home Number of Rooms \nand Sale Price in Cook County, IL", 
+      x = "Number of Rooms", 
+      y = "Sale Price"
+    ) + 
+    theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+Houses with more rooms tend to sell for more
+
+## Bathrooms
+
+```{r}
+sfh2123_sales_AT %>%
+  ggplot() +
+    geom_boxplot(aes(x = num_full_baths + num_half_baths * 0.5, y = sale_price, fill = factor(num_full_baths + num_half_baths * 0.5))) +
+    geom_smooth(aes(x = num_full_baths + num_half_baths * 0.5, y = sale_price), method = "gam", color = "black") +
+    scale_x_continuous(n.breaks = 20) +
+    scale_y_continuous(labels = label_currency()) +
+    labs(
+      title = "Single Family Home Total Number of Baths \nand Sale Price in Cook County, IL", 
+      x = "Total Number of Baths", 
+      y = "Sale Price"
+    ) + 
+    theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+Houses with more bathrooms tend to sell for more
+
+## Walkability
+
+```{r}
+sfh2123_sales_AT %>%
+  ggplot() +
+    geom_boxplot(aes(x = cmap_walkability_total_score, y = sale_price, fill = factor(cmap_walkability_total_score))) +
+    geom_smooth(aes(x = cmap_walkability_total_score, y = sale_price), method = "gam", color = "black") +
+    scale_x_continuous(n.breaks = 20) +
+    scale_y_continuous(labels = label_currency()) +
+    labs(
+      title = "Single Family Home CMAP Walkability and \nSale Price in Cook County, IL", 
+      x = "Total Walkability Score", 
+      y = "Sale Price"
+    ) + 
+    theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+
+```
+
+Houses with in less walkable communities tend to sell for more. Although it seems like individuals might want to live in more walkable communities. The kind of large single family homes that tend to sell for more actually contribute toward reducing walkability, which is most likely why we see a downward trend.
+:::
+
+### Mapping Our Outcome Variables
+
+Joining our geospatial data.
+
+```{r}
+library(sf)
+
+townships <- read_sf("https://gis.cookcountyil.gov/traditional/rest/services/politicalBoundary/MapServer/3/query?outFields=*&where=1%3D1&f=geojson") %>%
+  filter(NAME %in% c("LEMONT", "PALOS", "ORLAND")) %>%
+  left_join(
+    sfh2123_sales_AT %>%
+      group_by(township_code) %>%
+      summarize(
+        median_sp = median(sale_price), 
+        median_spr = median(sale_price_ratio))  %>%
+      transmute(median_sp, median_spr, NAME = case_when(
+        township_code == "19" ~ "LEMONT",
+        township_code == "30" ~ "PALOS",
+        township_code == "28" ~ "ORLAND",
+      )
+    )
+  )
+
+sfh2123_sales_sf <- sfh2123_sales_AT %>% 
+  st_as_sf(coords = c("longitude", "latitude"))
+```
+
+::: panel-tabset
+## Sale Prices
+
+```{r}
+library(leaflet)
+
+qpal1 <- colorQuantile("Greens", sfh2123_sales_sf$sale_price, n = 5)
+
+sfh2123_sales_sf %>%
+  leaflet() %>%
+    addProviderTiles(providers$CartoDB.Positron) %>% 
+    addPolygons(
+      data = townships,
+      fillColor = "black",
+      fillOpacity = 0.1,
+      color = "black",
+      weight = 2,
+      opacity = 0.5,
+      highlightOptions = highlightOptions(
+        fillOpacity = 0.2,
+        weight = 3),
+      label = sprintf(
+        "<strong>%s</strong><br>Median Sale: %s<br/>",
+        townships$NAME,
+        label_currency()(townships$median_sp)) %>% lapply(htmltools::HTML),
+      labelOptions = labelOptions(
+          style = list("font-weight" = "normal", padding = "3px 8px"),
+          textsize = "12px",
+          direction = "auto")
+    ) %>%
+    addCircleMarkers(
+      radius = 3,
+      fillColor = ~ qpal1(sale_price),
+      fillOpacity = 0.7,
+      stroke = FALSE,
+      label = sprintf(
+        "<strong>Sale Price:</strong> %s",
+        label_currency()(sfh2123_sales_sf$sale_price)) %>% lapply(htmltools::HTML),
+      labelOptions = labelOptions(
+          style = list("font-weight" = "normal", padding = "3px 8px"),
+          textsize = "12px",
+          direction = "auto")
+    ) %>%
+    addLegend(
+      pal = qpal1,
+      values = sfh2123_sales_sf$sale_price,
+      opacity = 0.7,
+      title = "Sale Price of Single <br>Family Homes in Cook <br>County",
+      position = "topright",
+      na.label = "Insufficient Data",
+      labFormat = function(type, cuts, p) {
+        n = length(cuts)
+        p = str_c(round(p * 100), '%')
+        cuts = str_c(label_currency()(cuts[-n]), " - ", label_currency()(cuts[-1]))
+        str_c('<span title="', p[-n], " - ", p[-1], '">', cuts, '</span>')
+      })
+```
+
+It seems that there is clustering of similarly priced homes within our three townships. Lemont has the highest median sale price, but Palos and Orland have similar median sale prices. Perhaps using a spatial modeling technique like a spatial Bayesian or conditional autoregressive model is waranted.
+
+```{r}
+library(spdep)
+
+knn <- knearneigh(sfh2123_sales_sf, k = 20)
+nb <- knn2nb(knn)
+weights <- nb2listw(nb, style = "B")
+
+moran.test(x = sfh2123_sales_sf$sale_price, listw = weights, zero.policy = TRUE) %>% 
+  broom::tidy() %>% 
+  select(estimate1, p.value, method) %>%
+  rename(`Moran I statistic` = estimate1) %>%
+  knitr::kable()
+```
+
+## Assessment to Sale Price Ratio
+
+```{r}
+qpal2 <- colorQuantile("RdBu", sfh2123_sales_sf$sale_price_ratio, n = 5)
+
+sfh2123_sales_sf %>%
+  leaflet() %>%
+    addProviderTiles(providers$CartoDB.Positron) %>% 
+    addPolygons(
+      data = townships,
+      fillColor = "black",
+      fillOpacity = 0.1,
+      color = "black",
+      weight = 2,
+      opacity = 0.5,
+      highlightOptions = highlightOptions(
+        fillOpacity = 0.2,
+        weight = 3),
+      label = sprintf(
+        "<strong>%s</strong><br>Median Sale Price Ratio: %s<br/>",
+        townships$NAME,
+        label_number(0.001)(townships$median_spr)) %>% lapply(htmltools::HTML),
+      labelOptions = labelOptions(
+          style = list("font-weight" = "normal", padding = "3px 8px"),
+          textsize = "12px",
+          direction = "auto")
+    ) %>%
+    addCircleMarkers(
+      radius = 3,
+      fillColor = ~ qpal2(sale_price_ratio),
+      fillOpacity = 0.7,
+      stroke = FALSE,
+      label = sprintf(
+        "<strong>Sale Price Ratio:</strong> %s",
+        label_number(0.001)(sfh2123_sales_sf$sale_price_ratio)) %>% lapply(htmltools::HTML),
+      labelOptions = labelOptions(
+          style = list("font-weight" = "normal", padding = "3px 8px"),
+          textsize = "12px",
+          direction = "auto")
+    ) %>%
+    addLegend(
+      pal = qpal2,
+      values = sfh2123_sales_sf$sale_price_ratio,
+      opacity = 0.7,
+      title = "Assessment to Sale Price <br>Ratio of Single Family<br> Homes in Cook County",
+      position = "topright",
+      na.label = "Insufficient Data",
+      labFormat = function(type, cuts, p) {
+        n = length(cuts)
+        p = str_c(round(p * 100), '%')
+        cuts = str_c(label_number(0.001)(cuts[-n]), " - ", label_number(0.001)(cuts[-1]))
+        str_c('<span title="', p[-n], " - ", p[-1], '">', cuts, '</span>')
+      })
+```
+
+It seems like the over/under assessment of properties does not exhibit much clustering so perhaps there are other variables that we should have to consider. There are some values that seem like they may be large outliers.
+:::
+
+### Processing Our Data
+
+For our over/under assessment model, I will define over assessment as greater than the median `sale_price_ratio`. Theoretically, this should be 1, but parcels are so routinely under assessed as compared to their true sale value that a threshold of 1 would place almost all houses in the under assessed category. I also chose a two class outcome in order to avoid potential complexities related to multiple classification models. I also considered creating a regression model that predicted assessment ratios and simply discretizing the predictions later, but opted against it.
+
+It also important to note that our assessment model will only include data from 2022 and our sale price model will include data from 2021 and 2022. Although prices may be slightly different in these years,
+
+```{r}
+assessment_data <- sfh2123_sales_AT %>%
+  filter(year == 2022) %>%
+  group_by(pin) %>%
+  slice_tail() %>%
+  ungroup() %>%
+  mutate(overassessed = factor(sale_price_ratio < median(sale_price_ratio)))
+
+sales_data <- sfh2123_sales_AT %>%
+  group_by(pin) %>%
+  slice_tail() %>%
+  st_as_sf(coords = c("longitude", "latitude")) %>%
+  st_set_crs(4326)
+```
+
+## Part B
+
+### Create workflow
+
+```{r}
+library(tidymodels)
+tidymodels_prefer()
+a_workflow <- workflow()
+```
+
+### Add Model To Workflow
+
+```{r}
+a_rf_spec <- rand_forest(mtry = tune(),trees = 1000, min_n = tune()) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
+
+a_workflow <- workflow() %>%
+  add_model(a_rf_spec)
+```
+
+### Add Recipe To Workflow
+
+I chose to use variables that I know are typically considered when buying a house, but we could definitely construct a workflow evaluating models with various predictors.
+
+```{r}
+a_rec <- assessment_data %>%
+  recipe(overassessed ~ year_built + building_sqft + land_sqft + num_bedrooms + num_rooms + num_full_baths + num_half_baths + num_fireplaces + type_of_residence + construction_quality + attic_finish + garage_size + ext_wall_material + basement_type + central_heating + roof_material + porch + central_air + school_elementary_district_name, data = .) %>% 
+  step_string2factor(all_string()) %>% 
+  step_impute_knn(all_predictors()) %>%
+  step_novel(all_nominal_predictors()) %>%
+  step_dummy(all_nominal_predictors())
+
+a_workflow <- a_workflow %>%
+  add_recipe(a_rec)
+```
+
+### Create testing/training data and evaluate your model
+
+```{r}
+set.seed(123)
+a_split <- initial_split(assessment_data)
+a_train_set <- training(a_split)
+a_test_set <- testing(a_split)
+
+set.seed(234)
+a_train_resamples <- bootstraps(a_train_set)
+```
+
+In order to reduce the model tuning time, we will use a repeated measure ANOVA model to eliminate tuning parameter combinations that are unlikely to yield the best results.
+
+```{r}
+library(finetune)
+
+set.seed(345)
+a_tune <- a_workflow %>%
+  tune_race_anova(
+    resamples = a_train_resamples,
+    grid = 20,
+    metrics = metric_set(mn_log_loss, roc_auc),
+    control = control_race(verbose = TRUE))
+```
+
+Finalize our model
+
+```{r}
+a_best <- select_best(a_tune, "mn_log_loss")
+a_final_rf <- finalize_model(a_rf_spec, a_best)
+
+a_final_wf <- workflow() %>%
+  add_recipe(a_rec) %>%
+  add_model(a_final_rf)
+```
+
+Let's see if there is an obvious spatial trend to our predictions
+
+```{r}
+a_final_wf %>% 
+  fit(a_train_set) %>%
+  augment(a_test_set) %>%
+  mutate(correct = case_when(
+    overassessed == .pred_class ~ "Correct",
+    TRUE ~ "Incorrect"
+  )) %>%
+  select(pin, correct, longitude, latitude) %>%
+  ggplot(aes(longitude, latitude, color = correct)) +
+    geom_point(size = 0.5, alpha = 0.5) +
+    labs(color = NULL) +
+    scale_color_manual(values = c("gray80", "darkred"))
+```
+
+... not really
+
+```{r}
+a_val_preds <- a_final_wf %>% 
+  fit(a_train_set) %>%
+  augment(a_test_set)
+
+a_metrics <- list(
+  a_val_preds %>%
+    roc_auc(overassessed, .pred_FALSE),
+  a_val_preds %>%
+    accuracy(overassessed, .pred_class),
+  a_val_preds %>%
+    f_meas(overassessed, .pred_class))
+
+a_metrics %>% bind_rows() %>% knitr::kable()
+```
+
+Our accuracy and auc is not that much higher than what would be expected by random chance. This is not really that encouraging for our model, but perhaps it indicates that there are no obvious trends in the overassessment/underassessment. That could reflect well on the assessor predictions.
+
+```{r}
+a_val_preds %>% 
+  conf_mat(truth = overassessed, estimate = .pred_class)
+```
+
+Again, we see that our results are not too great.
+
+```{r}
+a_val_preds %>% 
+  conf_mat(truth = overassessed, estimate = .pred_class) %>%
+  tidy() %>%
+  pivot_wider() %>%
+  rename(TN = cell_1_1, TP = cell_2_2, FN = cell_2_1, FP = cell_1_2) %>%
+  summarize(
+    TPR = TP/(TP+FN),
+    TNR = TN/(TN+TP),
+    FPR = FP/(FP+TN),
+    FNR = FN/(TP+FN),
+    PPV = TP/(TP+FP)
+  ) %>% 
+  knitr::kable()
+```
+
+It seems that we may be slightly better at predicting true "overassessments".
+
+```{r}
+library(vip)
+
+a_vip_rf_spec <- rand_forest(mtry = tune(), trees = 1000, min_n = tune()) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("classification")
+
+a_vip_rf <- finalize_model(a_vip_rf_spec, a_best)  
+a_vip_wf <- workflow() %>%   
+  add_recipe(a_rec) %>%   
+  add_model(a_vip_rf) 
+
+a_vip_rf_fit <- a_vip_wf %>%    
+  fit(a_train_set)
+
+a_vip_rf_fit %>% 
+  extract_fit_parsnip() %>% 
+  vip::vip(geom = "point")
+```
+
+Building square footage, land square footage, and year built seem to be the most important to this model, but its difficult to truly interpret what that means in the context of this model.
+
+## Part C
+
+### Create workflow
+
+```{r}
+s_workflow <- workflow()
+```
+
+### Add Model To Workflow
+
+```{r}
+s_rf_spec <- rand_forest(mtry = tune(), trees = 1000, min_n = tune()) %>%    
+  set_engine("ranger") %>%    
+  set_mode("regression")  
+
+s_workflow <- workflow() %>%   
+  add_model(s_rf_spec)
+```
+
+### Add Recipe To Workflow
+
+I chose to use variables that I know are typically considered when buying a house, but we could definitely construct a workflow evaluating models with various predictors.
+
+```{r}
+s_rec <- sales_data %>%    
+  st_drop_geometry() %>%   
+  recipe(sale_price ~ year_built + building_sqft + land_sqft + num_bedrooms + num_rooms + num_full_baths + num_half_baths + num_fireplaces + type_of_residence + construction_quality + attic_finish + garage_size + ext_wall_material + basement_type + central_heating + roof_material + porch + central_air + school_elementary_district_name, data = .) %>%    
+  step_string2factor(all_string()) %>%    
+  step_impute_knn(all_predictors()) %>%   
+  step_novel(all_nominal_predictors()) %>%   
+  step_dummy(all_nominal_predictors())  
+
+s_workflow <- s_workflow %>%   
+  add_recipe(s_rec)
+```
+
+### Create Testing/Training Data and Evaluate Your Model
+
+We are going to utilize spatial resampling to hopefully adjust for the clustering that we saw when mapping. Instead of utilizing the typical split, we have
+
+```{r}
+library(spatialsample)  
+
+set.seed(123) 
+s_train_set <- sales_data %>% filter(year != 2023)
+s_test_set <- sales_data %>% filter(year == 2023)
+
+set.seed(234) 
+s_train_resamples <- spatial_clustering_cv(s_train_set)  
+
+autoplot(s_train_resamples)
+```
+
+In order to reduce the model tuning time, we will use a repeated measure ANOVA model to eliminate tuning parameter combinations that are unlikely to yield the best results.
+
+```{r}
+set.seed(345) 
+s_tune <- s_workflow %>%   
+  tune_race_anova(
+    resamples = s_train_resamples,     
+    grid = 20,     
+    metrics = metric_set(rmse, mape),     
+    control = control_race(verbose = TRUE))
+```
+
+Finalize our model
+
+```{r}
+s_best <- select_best(s_tune, "rmse") 
+s_final_rf <- finalize_model(s_rf_spec, s_best)  
+s_final_wf <- workflow() %>%   
+  add_recipe(s_rec) %>%   
+  add_model(s_final_rf)  
+```
+
+Make our predictions and get the RMSE and MAPE
+
+```{r}
+s_val_preds <- s_final_wf %>%    
+  fit(s_train_set) %>%   
+  augment(s_test_set)  
+
+s_metrics <- list(   
+  s_val_preds %>%     
+    rmse(sale_price, .pred),   
+  s_val_preds %>%     
+    mape(sale_price, .pred))  
+
+s_metrics %>% bind_rows() %>% knitr::kable()
+```
+
+It seems the average deviation of our predicted prices from the true sale price is about \$97,500. That is pretty high all things considered. We definitely have quite a lot of refining to do.
+
+```{r}
+s_vip_rf_spec <- rand_forest(mtry = tune(), trees = 1000, min_n = tune()) %>% 
+  set_engine("ranger", importance = "impurity") %>% 
+  set_mode("regression")
+
+s_vip_rf <- finalize_model(s_vip_rf_spec, s_best)  
+s_vip_wf <- workflow() %>%   
+  add_recipe(s_rec) %>%   
+  add_model(s_vip_rf) 
+
+s_vip_rf_fit <- s_vip_wf %>%    
+  fit(s_train_set)
+
+s_vip_rf_fit %>% 
+  extract_fit_parsnip() %>% 
+  vip::vip(geom = "point")
+```
+
+Building square footage is by far the most important variable within our model. This makes a lot of sense given our prior EDA and just intuitively. I think the results line up pretty fairly with what one would expect.
