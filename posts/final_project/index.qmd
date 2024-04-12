@@ -1,0 +1,150 @@
+---
+title: "Final Project"
+author: "Ryan Zomorrodi"
+date:  last-modified
+categories: ["Final Project"]
+format: 
+  html:
+    toc: true
+    code-fold: true
+    embed-resources: true
+execute:
+  cache: true
+  warning: false
+  error: false
+csl: ieee.csl
+---
+
+
+Libraries
+```{r}
+library(readxl)
+library(sf)
+library(tidycensus)
+library(tidymodels)
+library(tidyverse)
+library(tigris)
+```
+
+## ACS
+```{r}
+acs5_2022_metadata <- load_variables(2022, "acs5") 
+
+blkGrp_vars <- c(
+    race_total = "B03002_001",
+    race_aianNH = "B03002_005",
+    race_asianNH = "B03002_006",
+    race_blackNH = "B03002_004",
+    race_hispanic = "B03002_012",
+    race_whiteNH = "B03002_003",
+    housingUnits = "B25001_001",
+    lowerValue = "B25076_001",
+    medValue = "B25077_001",
+    upperValue = "B25078_001",
+    homeownerCost = "B25088_001",
+    education_total = "B15003_001",
+    education_highSchool = "B15003_017",
+    education_ged = "B15003_018",
+    education_lt1yCollege = "B15003_019",
+    education_mt1yCollege = "B15003_020",
+    education_associate = "B15003_021",
+    education_bachelor = "B15003_022",
+    education_master = "B15003_023",
+    education_professional = "B15003_024",
+    education_doctorate = "B15003_025",
+    poverty_total = "B17010_001",
+    poverty_belowPovertyLvl = "B17010_002", 
+    language_total = "B99162_001",
+    language_onlyEnglish = "B99162_002",
+    computer_total = "B28003_001",
+    computer_hasAComp = "B28003_002",
+    internet_total = "B28011_001",
+    internet_noInternet = "B28011_008",
+    plumbing_total = "B25047_001",
+    plumbing_complete = "B25047_002",
+    vacancy_total = "B25002_001",
+    vacancy_vacant = "B25002_003",
+    occupied_total = "B25003_001",
+    occupied_owner = "B25003_002",
+    age_total = "B01001_001",
+    age_maleU5 = "B01001_003",
+    age_male5to9 = "B01001_004",
+    age_male10to14 = "B01001_005",
+    age_male15to17 = "B01001_006",
+    age_femaleU5 = "B01001_027",
+    age_female5to9 = "B01001_028",
+    age_female10to14 = "B01001_029",
+    age_female15to17 = "B01001_030")
+
+tract_vars <- c(
+    native_total = "B05002_001",
+    native_nativeBrn = "B05002_002",
+    native_foreignBrn = "B05002_013")
+
+select_vars_metadata <- acs5_2022_metadata %>%
+    filter(name %in% c(blkGrp_vars, tract_vars))
+```
+
+Get data from ACS
+```{r} 
+blk_data <- get_decennial(geography = "block", variables = "")
+blkGrp_data <- get_acs(geography = "block group", variables = blkGrp_vars, state = "IL", county = "Cook", output = "wide") 
+tract_data <- get_acs(geography = "tract", variables = tract_vars, state = "IL", county = "Cook", output = "wide") 
+```
+
+Function to calculate percent for each variable within the categories
+```{r}
+pct_calculator <- function(data, category) {
+    mutate(data, across(
+        .cols = matches(str_c(category, "(.*)(?<!(total))E$"), perl = TRUE), 
+        .fn = ~ .x / !!sym(str_c(category, "_totalE")),
+        .names = "{.col}Pct"))
+}
+```
+
+Get data from the ACS and process it
+```{r}
+blkGrp_data <- blkGrp_data %>%
+    rename(GEOID_BG = GEOID) %>%
+    mutate(GEOID_Tract = str_sub(GEOID_BG, 1, -2)) %>%
+    left_join(
+        tract_data %>%
+            select(-NAME), 
+        by = join_by(GEOID_Tract == GEOID)) %>%
+    relocate(GEOID_Tract, .after = GEOID_BG) %>%
+    pct_calculator("race") %>%
+    pct_calculator("education") %>%
+    pct_calculator("poverty") %>%
+    pct_calculator("native") %>%
+    pct_calculator("language") %>%
+    pct_calculator("computer") %>%
+    pct_calculator("internet") %>%
+    pct_calculator("plumbing") %>%
+    pct_calculator("vacancy") %>%
+    pct_calculator("computer") %>%
+    pct_calculator("occupied") %>%
+    pct_calculator("age") %>%
+    mutate(
+        age_U5EPct = age_maleU5EPct + age_femaleU5EPct,
+        age_5to9EPct = age_male5to9EPct + age_female5to9EPct,
+        age_10to17EPct = age_male10to14EPct + age_female10to14EPct + age_male15to17EPct + age_male15to17EPct,
+        population = race_totalE) %>%
+    select(starts_with("GEOID"), NAME, ends_with("Pct"), -contains("male"), population, housingUnitsE, lowerValueE, medValueE, upperValueE, homeownerCostE)
+```
+
+```{r}
+chicagoBoundaries <- st_read("https://data.cityofchicago.org/api/geospatial/qqq8-j68g?fourfour=qqq8-j68g&cacheBust=1712775952&date=20240411&accessType=DOWNLOAD&method=export&format=GeoJSON") %>%
+    st_transform("EPSG:4269")
+
+chicagoCensusTracts <- block_groups(state = "IL", county = "Cook") %>%
+    filter(st_intersects(., chicagoBoundaries, sparse = FALSE) %>% unlist()) %>%
+    filter(!str_detect(GEOID, "170319900"))
+```
+
+```{r}
+pb_test_path <- tempfile()
+download.file("https://www.chicagowaterquality.org/DataFiles/wqContent/Results.xlsx", pb_test_path, mode="wb")
+
+chicago_lead_tests <- read_excel(path = pb_test_path, skip = 2, sheet = 1) %>%
+    filter(!is.na(`Sample Date`))
+```
