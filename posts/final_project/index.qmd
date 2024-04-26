@@ -13,30 +13,277 @@ execute:
   warning: false
   error: false
 csl: ieee.csl
+
+references:
+- id: huynh_estimated_2024
+  type: article-journal
+  author:
+  - family: Huynh
+    given: Benjamin Q.
+  - family: Chin
+    given: Elizabeth T.
+  - family: Kiang
+    given: Mathew V.
+  issued:
+  - year: 2024
+    month: 3
+  title: Estimated Childhood Lead Exposure From Drinking Water in Chicago
+  container-title: JAMA pediatrics
+  page: e240133
+  abstract: 'IMPORTANCE: There is no level of lead in drinking water considered to
+    be safe, yet lead service lines are still commonly used in water systems across
+    the US. OBJECTIVE: To identify the extent of lead-contaminated drinking water
+    in Chicago, Illinois, and model its impact on children younger than 6 years. DESIGN,
+    SETTING, AND PARTICIPANTS: For this cross-sectional study, a retrospective assessment
+    was performed of lead exposure based on household tests collected from January
+    2016 to September 2023. Tests were obtained from households in Chicago that registered
+    for a free self-administered testing service for lead exposure. Machine learning
+    and microsimulation were used to estimate citywide childhood lead exposure. EXPOSURE:
+    Lead-contaminated drinking water, measured in parts per billion. MAIN OUTCOMES
+    AND MEASURES: Number of children younger than 6 years exposed to lead-contaminated
+    water. RESULTS: A total of 38 385 household lead tests were collected. An estimated
+    68% (95% uncertainty interval, 66%-69%) of children younger than 6 years were
+    exposed to lead-contaminated water, corresponding to 129 000 children (95% uncertainty
+    interval, 128 000-131 000 children). Ten-percentage-point increases in block-level
+    Black and Hispanic populations were associated with 3% (95% CI, 2%-3%) and 6%
+    (95% CI, 5%-7%) decreases in odds of being tested for lead and 4% (95% CI, 3%-6%)
+    and 11% (95% CI, 10%-13%) increases in having lead-contaminated drinking water,
+    respectively. CONCLUSIONS AND RELEVANCE: These findings indicate that childhood
+    lead exposure is widespread in Chicago, and racial inequities are present in both
+    testing rates and exposure levels. Machine learning may assist in preliminary
+    screening for lead exposure, and efforts to remediate the effects of environmental
+    racism should involve improving outreach for and access to lead testing services.'
+  DOI: 10.1001/jamapediatrics.2024.0133
+  ISSN: 2168-6211
+  PMCID: PMC10949143
+  PMID: '38497944'
 ---
 
+## Introduction
+
+The following project is a replication attempt of the machine learning model described in Huynh et al. @huynh_estimated_2024 predicting lead exposure from drinking water within the city of Chicago. Lead-contaminated drinking water at the block level was defined as a binary variable indicating whether the majority of tests within a block have at least 1 ppb lead concentration. According to their model, approximately 75% of blocks are estimated to have lead-contaminated drinking water. The greatest predictors of lead-contaminated drinking water were geographic areas, population at the block, and number of buildings.
+
+Huynh et al. (and by extension, I) used the following data sources:
+
+<details class="code-fold">
+<summary>Data Sources</summary>
++---------------------------------------------------------------+-----------------------------------------------------------+-------------------------+
+| Source                                                        | Measure                                                   | Extent                  |
++===============================================================+===========================================================+=========================+
+| City of Chicago Department of Water Management Lead Test Data | Consecutive lead tests (ppb)                              | Anonymized to the block |
++---------------------------------------------------------------+-----------------------------------------------------------+-------------------------+
+| Census                                                        | Block FIPS                                                | Block                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Population (#)                                            | Block                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Race/ethnicity (#)                                        | Block                   |
+|                                                               |                                                           |                         |
+|                                                               | -   AIAN                                                  |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Asian                                                 |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Black                                                 |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Hispanic                                              |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   White                                                 |                         |
++---------------------------------------------------------------+-----------------------------------------------------------+-------------------------+
+| American Community Survey                                     | Block FIPS                                                | Block                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Block group FIPS                                          | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Population (#)                                            | Block group, tract      |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Race/ethnicity (#)                                        | Block group, tract      |
+|                                                               |                                                           |                         |
+|                                                               | -   AIAN                                                  |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Asian                                                 |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Black                                                 |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Hispanic                                              |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   White                                                 |                         |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Housing units (#)                                         | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Median house value (\$)                                   | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Upper house value (\$)                                    | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Lower house value (\$)                                    | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Median homeowner costs (\$)                               | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Education (#)                                             | Block group             |
+|                                                               |                                                           |                         |
+|                                                               | -   High school                                           |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   GED                                                   |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   \<1 year of college                                   |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   \> 1 year of college                                  |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Associate's degree                                    |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Bachelor's degree                                     |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Master's degree                                       |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Professional School                                   |                         |
+|                                                               |                                                           |                         |
+|                                                               | -   Doctoral Degree                                       |                         |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Poverty (#)                                               | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | English-only speakers (#)                                 | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Computer access (#)                                       | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Internet access (#)                                       | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Complete plumbing facilities (#)                          | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Vacant Housing (#)                                        | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Owner-occupied (#)                                        | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Children under 5 (#)                                      | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Children under 10 (#)                                     | Block group             |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Children under 18 (#)                                     | Block group             |
++---------------------------------------------------------------+-----------------------------------------------------------+-------------------------+
+| Chicago Building Footprints                                   | Median building age (years)                               | Block                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Building (#)                                              | Block                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Max age (years)                                           | Block                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Mean age (years)                                          | Block                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Built after 1986 (#)                                      | Block                   |
++---------------------------------------------------------------+-----------------------------------------------------------+-------------------------+
+| Chicago Health Atlas                                          | Community area                                            | Community area          |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Lead poisoning rate (%)                                   | Community area          |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Historical lead poisoning rate (%)                        | Community area          |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Economic diversity index                                  | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Hardship index                                            | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Social vulnerability index                                | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Major crime (#)                                           | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Eviction rate (%)                                         | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Fine particulate matter concentration ($\mu\text{g/m}^3$) | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Access to food (%)                                        | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Uninsured rate (%)                                        | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Per capita income (\$)                                    | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Cognitive difficulty (%)                                  | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Disability (%)                                            | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Crowded housing (%)                                       | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Rent burdened (%)                                         | Tract                   |
++                                                               +-----------------------------------------------------------+-------------------------+
+|                                                               | Vacant housing (%)                                        | Tract                   |
++---------------------------------------------------------------+-----------------------------------------------------------+-------------------------+
+</details>
+
+
+
+## Data
 
 Libraries
 ```{r}
+library(bonsai)
+library(corrr)
+library(finetune)
+library(future)
+library(httr2)
+library(jsonlite)
+library(leaflet)
+library(magrittr)
+library(mice)
 library(readxl)
 library(sf)
+library(themis)
 library(tidycensus)
 library(tidymodels)
 library(tidyverse)
 library(tigris)
 ```
 
-## ACS
+### Chicago Boundaries
+
+#### Download
+Download boundaries at various levels: the city, community areas, and census blocks.
 ```{r}
-acs5_2022_metadata <- load_variables(2022, "acs5") 
+#| output: false
+
+chicagoBoundaries <- st_read("https://data.cityofchicago.org/api/geospatial/qqq8-j68g?fourfour=qqq8-j68g&cacheBust=1712775952&date=20240411&accessType=DOWNLOAD&method=export&format=GeoJSON") %>%
+    st_transform("EPSG:4269")
+
+chicagoCommunityAreas <- st_read("https://data.cityofchicago.org/api/geospatial/cauq-8yn6?method=export&format=GeoJSON") %>%
+    st_transform("EPSG:4269")
+
+cookBlocks <- blocks(state = "IL", county = "Cook") 
+```
+
+#### Process
+Perform an intersection on census blocks to subset to those blocks that are within Chicago Boundaries. Mutate GEOIDs to create complete block, block group, and tract GEOIDS.
+```{r}
+#| eval: false
+
+chicagoBlocks <- cookBlocks %>%
+    filter(st_intersects(., chicagoBoundaries, sparse = FALSE) %>% unlist()) %>%
+    filter(!str_detect(TRACTCE20, "^9900")) %>%
+    mutate(GEOID_blk = GEOID20) %>%
+    mutate(GEOID_blkGrp = str_sub(GEOID_blk, 1, -4)) %>%
+    mutate(GEOID_tract = str_sub(GEOID_blk, 1, -5)) %>% 
+    select(starts_with("GEOID_"))
+```
+
+### American Community Survey
+
+#### Download
+Get metadata of all the relevant American Community Survey data.
+```{r}
+#| eval: false
+
+census_metadata <- 
+    bind_rows(
+        load_variables(2022, "acs5"), 
+        load_variables(2020, "pl"))
+
+blk_vars <- c(
+    race_blk_total = "P2_001N",
+    race_blk_aianNH = "P2_007N",
+    race_blk_asianNH = "P2_008N",
+    race_blk_blackNH = "P2_006N",
+    race_blk_hispanic = "P2_002N",
+    race_blk_whiteNH = "P2_005N"
+)
 
 blkGrp_vars <- c(
-    race_total = "B03002_001",
-    race_aianNH = "B03002_005",
-    race_asianNH = "B03002_006",
-    race_blackNH = "B03002_004",
-    race_hispanic = "B03002_012",
-    race_whiteNH = "B03002_003",
+    race_blkGrp_total = "B03002_001",
+    race_blkGrp_aianNH = "B03002_005",
+    race_blkGrp_asianNH = "B03002_006",
+    race_blkGrp_blackNH = "B03002_004",
+    race_blkGrp_hispanic = "B03002_012",
+    race_blkGrp_whiteNH = "B03002_003",
     housingUnits = "B25001_001",
     lowerValue = "B25076_001",
     medValue = "B25077_001",
@@ -77,74 +324,798 @@ blkGrp_vars <- c(
     age_female15to17 = "B01001_030")
 
 tract_vars <- c(
+    race_tract_total = "B03002_001",
+    race_tract_aianNH = "B03002_005",
+    race_tract_asianNH = "B03002_006",
+    race_tract_blackNH = "B03002_004",
+    race_tract_hispanic = "B03002_012",
+    race_tract_whiteNH = "B03002_003",
     native_total = "B05002_001",
-    native_nativeBrn = "B05002_002",
-    native_foreignBrn = "B05002_013")
+    native_nativeBrn = "B05002_002")
 
-select_vars_metadata <- acs5_2022_metadata %>%
-    filter(name %in% c(blkGrp_vars, tract_vars))
+select_vars_metadata <- census_metadata %>%
+    filter(name %in% c(blk_vars, blkGrp_vars, tract_vars))
 ```
 
-Get data from ACS
-```{r} 
-blk_data <- get_decennial(geography = "block", variables = "")
+Download American Community Survey data for all the relevant variables
+```{r}
+#| eval: false
+
+blk_data <- get_decennial(geography = "block", variables = blk_vars, state = "IL", county = "Cook", output = "wide")
 blkGrp_data <- get_acs(geography = "block group", variables = blkGrp_vars, state = "IL", county = "Cook", output = "wide") 
 tract_data <- get_acs(geography = "tract", variables = tract_vars, state = "IL", county = "Cook", output = "wide") 
 ```
 
-Function to calculate percent for each variable within the categories
+#### Process
+Join datasets and utilize multiple imputation by chained equations with random forest as the regression model.
 ```{r}
-pct_calculator <- function(data, category) {
-    mutate(data, across(
-        .cols = matches(str_c(category, "(.*)(?<!(total))E$"), perl = TRUE), 
-        .fn = ~ .x / !!sym(str_c(category, "_totalE")),
-        .names = "{.col}Pct"))
-}
-```
+#| eval: false
 
-Get data from the ACS and process it
-```{r}
-blkGrp_data <- blkGrp_data %>%
-    rename(GEOID_BG = GEOID) %>%
-    mutate(GEOID_Tract = str_sub(GEOID_BG, 1, -2)) %>%
+chicagoACS <- blk_data %>%
+    select(-NAME) %>%
+    rename(GEOID_blk = GEOID) %>%
+    mutate(GEOID_blkGrp = str_sub(GEOID_blk, 1, -4)) %>%
+    mutate(GEOID_tract = str_sub(GEOID_blk, 1, -5)) %>%
+    relocate(GEOID_blkGrp, GEOID_tract, .after = GEOID_blk) %>%
+    left_join(
+        blkGrp_data %>%
+            select(-ends_with("M"), -NAME) %>%
+            mice(meth = "rf", seed = 123) %>%
+            complete() %>%
+            as_tibble(),
+        join_by(GEOID_blkGrp == GEOID)) %>%
     left_join(
         tract_data %>%
             select(-NAME), 
-        by = join_by(GEOID_Tract == GEOID)) %>%
-    relocate(GEOID_Tract, .after = GEOID_BG) %>%
-    pct_calculator("race") %>%
+        join_by(GEOID_tract == GEOID)) %>%
+    mutate(
+        age_U5E = age_maleU5E + age_femaleU5E,
+        age_5to9E = age_male5to9E + age_female5to9E,
+        age_10to17E = age_male10to14E + age_female10to14E + age_male15to17E + age_male15to17E) %>%
+    select(-contains("male"), -ends_with("M")) %>%
+    right_join(
+        chicagoBlocks %>%
+            st_drop_geometry()
+    )
+```
+
+### Chicago Building Footprints
+
+#### Download
+Download Chicago Building Footprints dataset to identify the age and number of buildings.
+```{r}
+#| eval: false
+
+chicagoBuildings <- st_read("https://data.cityofchicago.org/api/geospatial/syp8-uezg?fourfour=syp8-uezg&cacheBust=1712775954&date=20240414&accessType=DOWNLOAD&method=export&format=GeoJSON") %>%
+    st_transform("EPSG:4269")
+```
+
+#### Process
+Remove buildings with empty geometries or empty street names. Spatial join buildings to the block. Summarize building characteristics at the block level. 
+```{r}
+#| eval: false
+
+sf_use_s2(FALSE)
+
+chicagoBuildingsImp <- chicagoBuildings %>%
+    filter(!st_is_empty(.)) %>%
+    filter(st_name1 != "") %>%
+    mutate(year_built =
+        case_when(
+            year_built == 0 ~ NA,
+            .default = as.integer(year_built)
+        )      
+    ) %>%
+    select(year_built) %>%
+    st_join(chicagoBlocks) %>%
+    st_drop_geometry() %>%
+    left_join(chicagoACS) %>%
+    tibble() %>%
+    mice(meth = "rf", seed = 234) %>%
+    complete() %>%
+    as_tibble()
+
+chicagoBldBlk <- chicagoBuildingsImp %>%
+    st_drop_geometry() %>%
+    group_by(GEOID_blk) %>%
+    summarise(
+        bldAge_median = 2024 - median(year_built),
+        bld_number = n(),
+        bldAge_max = 2024 - min(year_built),
+        bldAge_mean = 2024 - mean(year_built),
+        bldAge_nAft86 = sum(year_built > 1986)
+    )
+```
+
+### Chicago DWM Lead Tests
+
+#### Download
+Download Department of Water Management lead testing data 
+```{r}
+#| eval: false
+
+pb_test_path <- tempfile()
+download.file("https://www.chicagowaterquality.org/DataFiles/wqContent/Results.xlsx", pb_test_path, mode="wb")
+
+chicagoPbTest <- read_excel(path = pb_test_path, skip = 2, sheet = 1) 
+```
+
+
+#### Process
+```{r}
+#| eval: false
+
+chicagoBuildingAddresses <- chicagoBuildings %>%
+    filter(!st_is_empty(.)) %>%
+    filter(st_name1 != "") %>%
+    st_join(chicagoBlocks) %>%
+    st_drop_geometry() %>%
+    as_tibble() %>%
+    arrange(t_add1) %>%
+    mutate(ID = row_number()) %>%
+    mutate(
+        Address = str_pad(t_add1, 2, pad = "0"),
+        Address = str_c(str_sub(Address, end = -3), "XX"),
+        Address = str_c(Address, pre_dir1, st_name1, st_type1, sep = " "))
+
+chicagoPbBlk <- chicagoPbTest %>%
+    filter(!is.na(`Sample Date`)) %>%
+    filter(`1st Draw` != "See Follow-Up Sequential Sampling Table for Results") %>%
+    mutate(across(c(`1st Draw`, `2/3 Min`, `5 Min`), ~
+        case_when(
+            str_detect(.x, "<") ~ NA,
+            .default = .x
+        )
+    )) %>%
+    mutate(across(c(`1st Draw`, `2/3 Min`, `5 Min`), ~
+        case_when(
+            is.na(.x) ~ TRUE,
+            .default = FALSE
+        ),
+        .names = "{.col}_lt1"
+    )) %>%
+    mutate(ID = 
+        map_int(Address, ~
+            chicagoBuildingAddresses %>%
+                filter(Address == .x) %>%
+                slice( (n() + (n() %% 2))/2) %>%
+                pluck("ID") %>%
+                {ifelse(length(.) == 0, NA, .)}
+        )
+    ) %>% 
+    left_join(chicagoBuildingAddresses) %>%
+    group_by(GEOID_blk) %>%
+    summarize(PB_gt1Pct = 1 - mean(`1st Draw_lt1`), PB_nTests = n()) %>%
+    mutate(PB_majoritygt1 = PB_gt1Pct >= 0.5)
+```
+
+### Chicago Health Atlas
+
+```{r}
+#| eval: false
+
+chicagoHAtract <- request("https://chicagohealthatlas.org/api/action/download/") %>%
+    req_method("POST") %>%
+    req_body_raw(r"[{"layer":"tract-2020","topics":"EDX-~2018-2022,HDX-~2018-2022,SVI-~2020,CZM-~2018-2022,EVR-~2018,PMC-~2023,LFA-~2019,UNS-~2018-2022,PCI-~2018-2022,DIV-~2018-2022,DIS-~2018-2022,HTJ-~2018-2022,RBU-~2018-2022,VAC-~2018-2022","state":"","within":"","regions":"","place_filters":"","errors":"se","population":false,"lat_long":false,"counties":false,"documentation":false,"format":"csv","insight":"","benchmark":false}]", "application/x-www-form-urlencoded") %>%
+    req_perform() %>%
+    resp_body_string() %>%
+    {read_csv(., col_names = names(read_csv(., n_max = 0)), cols(GEOID = "c"), skip = 2)} %>%
+    select(-Layer, -Name) %>%
+    rename(GEOID_tract = GEOID) %>%
+    drop_na(!ends_with("se"))
+
+
+chicagoHAPbCA <- request("https://chicagohealthatlas.org/api/action/download/") %>%
+    req_method("POST") %>%
+    req_body_raw(r"[{"layer":"neighborhood","topics":"LDPP-~2023,LDPPH-~2016","state":"","within":"","regions":"","place_filters":"","errors":"se","population":false,"lat_long":false,"counties":false,"documentation":false,"format":"csv","insight":"","benchmark":false}]", "application/x-www-form-urlencoded") %>%
+    req_perform() %>%
+    resp_body_string() %>%
+    {read_csv(., col_names = names(read_csv(., n_max = 0)), cols(GEOID = "c"), skip = 2)}
+
+chicagoHAblk <- chicagoBlocks %>%
+    st_join(
+        left_join(chicagoHAPbCA, chicagoCommunityAreas, join_by(GEOID == area_numbe)) %>%
+            st_as_sf(), 
+        join = st_covered_by, 
+        largest = TRUE) %>%
+    rename(GEOID_CA = GEOID) %>%
+    left_join(chicagoHAtract) %>%
+    st_drop_geometry() %>%
+    as_tibble() %>%
+    select(-Layer, -Name, -community, -area, -shape_area, -perimeter, -area_num_1, -comarea_id, -comarea, -shape_len) %>%
+    drop_na(!ends_with("se"))
+```
+
+### Chicago Service Line Inventory
+
+#### Download
+Not currently implemented due to time constraints. This an additional data source that I am contemplating using.
+```{r}
+#| eval: false
+
+resp <- building_blocks %>%
+    st_drop_geometry() %>%
+    as_tibble() %>%
+    filter(year_built != 0) %>%
+    slice(1:100) %>% 
+    mutate(st_add = str_c(label_hous, pre_dir1, st_name1, st_type1, sep = " ")) %>%
+    pull(st_add) %>% 
+    map(~
+        request("https://sli.chicagowaterquality.org/servicematerialsearch/api/") %>%
+            req_method("POST") %>%
+            req_body_raw(str_c(r"[{"type":"text","accNum":"-","addr":"]", .x, r"["}]"))
+    ) %>%
+    req_perform_parallel(on_error = "continue")
+
+resp %>%
+    resps_successes() %>%
+    keep(map_lgl(., resp_has_body)) %>%
+    resps_data(resp_body_json) %>%
+    map(~ fromJSON(.x) %>% `[[`(1)) %>%
+    map_df(bind_cols)
+```
+
+### Joining and Conducting Final Processing
+In the end, the following criteria was used to include blocks within the study:  
+
+-   Population greater than 0
+-   Number of buildings greater than 0
+-   Within tract included in the Chicago Health Atlas
+
+This leaves us with:  
+
+-   33,004 total blocks
+-   12,031 blocks with at least one prior DWM test
+    -   0.799 blocks have a majority of first draw tests with detected lead levels greater than 1 ppb 
+
+```{r}
+#| eval: false
+
+pct_calculator <- function(data, category) {
+    mutate(data, across(
+        .cols = matches(str_c("^", category, "(.*)(?<!(total))E$"), perl = TRUE), 
+        .fn = ~ .x / !!sym(str_c(category, "_totalE")),
+        .names = "{.col}Pct")) %>%
+    select(-matches(str_c("^", category, "(.*)(?<!(total))E$"), perl = TRUE))
+}
+
+data <- chicagoACS %>%
+    left_join(chicagoPbBlk) %>%
+    inner_join(chicagoBldBlk) %>%
+    inner_join(chicagoHAblk) %>%
+    select(-ends_with("se")) %>%
+    relocate(GEOID_CA, PB_gt1Pct, PB_nTests, PB_majoritygt1, .after = GEOID_tract) %>%
+    rename_with(.cols = starts_with("race_blk_"), .fn = ~ str_c(.x, "E")) %>%
+    filter(race_blk_totalE > 0) %>%
+    pct_calculator("race_blk") %>%
+    pct_calculator("race_blkGrp") %>%
+    pct_calculator("race_tract") %>%
     pct_calculator("education") %>%
     pct_calculator("poverty") %>%
-    pct_calculator("native") %>%
-    pct_calculator("language") %>%
     pct_calculator("computer") %>%
     pct_calculator("internet") %>%
     pct_calculator("plumbing") %>%
     pct_calculator("vacancy") %>%
-    pct_calculator("computer") %>%
     pct_calculator("occupied") %>%
     pct_calculator("age") %>%
-    mutate(
-        age_U5EPct = age_maleU5EPct + age_femaleU5EPct,
-        age_5to9EPct = age_male5to9EPct + age_female5to9EPct,
-        age_10to17EPct = age_male10to14EPct + age_female10to14EPct + age_male15to17EPct + age_male15to17EPct,
-        population = race_totalE) %>%
-    select(starts_with("GEOID"), NAME, ends_with("Pct"), -contains("male"), population, housingUnitsE, lowerValueE, medValueE, upperValueE, homeownerCostE)
+    pct_calculator("language") %>%
+    pct_calculator("native") %>%
+    drop_na(-starts_with("PB")) %>%
+    select(-matches("^(?!race)(.*)_totalE$", perl = TRUE)) %>%
+    rename_with(.cols = starts_with("race"), ~ 
+        str_replace(.x, "race", "population") %>%
+            str_replace("_totalE", "E")
+    )
+
+data %>%
+    summarize(across(everything(), ~ sum(is.na(.x)))) %>%
+    View()
 ```
 
 ```{r}
-chicagoBoundaries <- st_read("https://data.cityofchicago.org/api/geospatial/qqq8-j68g?fourfour=qqq8-j68g&cacheBust=1712775952&date=20240411&accessType=DOWNLOAD&method=export&format=GeoJSON") %>%
-    st_transform("EPSG:4269")
+#| include: false
+#| eval: false
 
-chicagoCensusTracts <- block_groups(state = "IL", county = "Cook") %>%
-    filter(st_intersects(., chicagoBoundaries, sparse = FALSE) %>% unlist()) %>%
-    filter(!str_detect(GEOID, "170319900"))
+save(data, file = "../data/lead_data.RData")
 ```
 
 ```{r}
-pb_test_path <- tempfile()
-download.file("https://www.chicagowaterquality.org/DataFiles/wqContent/Results.xlsx", pb_test_path, mode="wb")
+#| include: false
 
-chicago_lead_tests <- read_excel(path = pb_test_path, skip = 2, sheet = 1) %>%
-    filter(!is.na(`Sample Date`))
+load("../data/lead_data.RData")
+```
+
+## Exploratory Data Analysis
+
+Tracts that test more tend to have a higher percent of water tests with greater than 1 PPB lead even when adjusting for population size. 
+
+::: panel-tabset
+## Lead Positive Percentage by Number of Tests
+```{r}
+data %>%
+    group_by(GEOID_tract) %>%
+    summarize(
+        n = sum(PB_nTests, na.rm = TRUE),
+        gt1pct = sum(PB_nTests * PB_gt1Pct, na.rm = TRUE)/ n
+    ) %>% 
+    group_by(n, gt1pct) %>%
+    summarize(nTract = n()) %>% 
+    ggplot(aes(x = n, y = gt1pct, color = nTract, size = nTract)) +
+        geom_point() +
+        labs(
+            title = "Number of Tests vs Percent of Tests with Greater than 1 \nPPB Lead Detected by Tract",
+            x = "Tests (#)",
+            y = "Tests with Greater than 1 PPB Lead Detected (%)") +
+        scale_color_gradient(low = "steelblue1", high = "black") +
+        scale_y_continuous(labels = scales::percent) +
+        theme(
+            plot.title = element_text(hjust = 0.5),
+            legend.position="none"
+        )
+```
+
+## Lead Positive Percentage by Number of Tests Per Person
+```{r}
+data %>%
+    group_by(GEOID_tract) %>%
+    summarize(
+        nPer100People = 100 *sum(PB_nTests, na.rm = TRUE) / population_tractE[1],
+        gt1pct = sum(PB_nTests * PB_gt1Pct, na.rm = TRUE)/  sum(PB_nTests, na.rm = TRUE)
+    ) %>% 
+    ggplot(aes(x = nPer100People, y = gt1pct)) +
+        geom_point(color = "steelblue1") +
+        labs(
+            title = "Number of Tests per 100 Residents vs Percent of Tests with Greater than 1 \nPPB Lead Detected by Tract",
+            x = "Tests Per 100 Residents (#)",
+            y = "Tests with Greater than 1 PPB Lead Detected (%)") +
+        scale_y_continuous(labels = scales::percent) +
+        theme(
+            plot.title = element_text(hjust = 0.5),
+            legend.position="none"
+        )
+```
+:::
+
+We can see that residents on the north side have disproportionately low positive lead rates when compared to that of the rest of Chicago
+
+::: panel-tabset
+## Positive Test Percentage by Block Group
+```{r}
+#| fig-height: 10
+
+data %>%
+    group_by(GEOID_blkGrp) %>%
+    summarize(
+        n = sum(PB_nTests, na.rm = TRUE),
+        gt1pct = sum(PB_nTests * PB_gt1Pct, na.rm = TRUE) / n
+    ) %>% 
+    left_join(block_groups(state = "IL", county = "Cook", progress_bar = FALSE), join_by(GEOID_blkGrp == GEOID)) %>%
+    st_as_sf() %$%
+        {leaflet(.) %>%
+        addProviderTiles(providers$CartoDB.Positron) %>% 
+        addPolygons(
+            fillColor = ~ colorNumeric("Blues", gt1pct)(gt1pct),
+            fillOpacity = 0.7,
+            weight = 0,
+            highlightOptions = highlightOptions(
+                color = "Black",
+                fillOpacity = 1,
+                bringToFront = T),
+            label = str_glue_data(., "<strong>{GEOID_blkGrp}</strong><br>Percent of Tests: {round(gt1pct,2)}<br/>") %>% 
+                    map(htmltools::HTML),
+            labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "12px",
+                direction = "auto")
+        ) %>%
+        addLegend(
+            pal = colorNumeric("Blues", gt1pct),
+            values = gt1pct,
+            opacity = 0.7,
+            title = "Tests with Greater than 1 PPB Lead <br> Detected (%) By Block Group",
+            position = "topright",
+            na.label = "Insufficient Data",
+            labFormat = labelFormat(
+                prefix = " ", suffix = " %",
+                transform = function(x) 100 * x)
+        )} %>%
+        htmlwidgets::prependContent(htmltools::tags$style(type = "text/css", "div.info.legend.leaflet-control br {clear: both;}"))
+```
+
+## Positive Test Percentage by Tract
+```{r}
+#| fig-height: 10
+
+data %>%
+    group_by(GEOID_tract) %>%
+    summarize(
+        n = sum(PB_nTests, na.rm = TRUE),
+        gt1pct = sum(PB_nTests * PB_gt1Pct, na.rm = TRUE) / n
+    ) %>% 
+    left_join(tracts(state = "IL", county = "Cook", progress_bar = FALSE), join_by(GEOID_tract == GEOID)) %>%
+    st_as_sf() %$%
+        {leaflet(.) %>%
+        addProviderTiles(providers$CartoDB.Positron) %>% 
+        addPolygons(
+            fillColor = ~ colorNumeric("Blues", gt1pct)(gt1pct),
+            fillOpacity = 0.7,
+            weight = 0,
+            highlightOptions = highlightOptions(
+                color = "Black",
+                fillOpacity = 1,
+                bringToFront = T),
+            label = str_glue_data(., "<strong>{GEOID_tract}</strong><br>Percent of Tests: {round(gt1pct,2)}<br/>") %>% 
+                    map(htmltools::HTML),
+            labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "12px",
+                direction = "auto")
+        ) %>%
+        addLegend(
+            pal = colorNumeric("Blues", gt1pct),
+            values = gt1pct,
+            opacity = 0.7,
+            title = "Tests with Greater than 1 PPB Lead <br> Detected (%) By Tract",
+            position = "topright",
+            na.label = "Insufficient Data",
+            labFormat = labelFormat(
+                prefix = " ", suffix = " %",
+                transform = function(x) 100 * x)
+        )} %>%
+        htmlwidgets::prependContent(htmltools::tags$style(type = "text/css", "div.info.legend.leaflet-control br {clear: both;}"))
+```
+
+## Positive Test Percentage by Community Area
+```{r}
+#| fig-height: 10
+
+data %>%
+    group_by(GEOID_CA) %>%
+    summarize(
+        n = sum(PB_nTests, na.rm = TRUE),
+        gt1pct = sum(PB_nTests * PB_gt1Pct, na.rm = TRUE) / n
+    ) %>% 
+    left_join(chicagoCommunityAreas, join_by(GEOID_CA == area_numbe)) %>%
+    st_as_sf() %$%
+        {leaflet(.) %>%
+        addProviderTiles(providers$CartoDB.Positron) %>% 
+        addPolygons(
+            fillColor = ~ colorNumeric("Blues", gt1pct)(gt1pct),
+            fillOpacity = 0.7,
+            weight = 0,
+            highlightOptions = highlightOptions(
+                color = "Black",
+                fillOpacity = 1,
+                bringToFront = T),
+            label = str_glue_data(., "<strong>{community}</strong><br>Percent of Tests: {round(gt1pct,2)}<br/>") %>% 
+                    map(htmltools::HTML),
+            labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "12px",
+                direction = "auto")
+        ) %>%
+        addLegend(
+            pal = colorNumeric("Blues", gt1pct),
+            values = gt1pct,
+            opacity = 0.7,
+            title = "Tests with Greater than 1 PPB Lead <br> Detected (%) By Community Area",
+            position = "topright",
+            na.label = "Insufficient Data",
+            labFormat = labelFormat(
+                prefix = " ", suffix = " %",
+                transform = function(x) 100 * x)
+        )} %>%
+        htmlwidgets::prependContent(htmltools::tags$style(type = "text/css", "div.info.legend.leaflet-control br {clear: both;}"))
+```
+
+:::
+
+::: panel-tabset
+## Tests Per Person by Block Group
+```{r}
+#| fig-height: 10
+
+data %>%
+    group_by(GEOID_blkGrp) %>%
+    summarize(
+        nPer100People = 100 *sum(PB_nTests, na.rm = TRUE) / population_blkGrpE[1]
+    ) %>% 
+    left_join(block_groups(state = "IL", county = "Cook", progress_bar = FALSE), join_by(GEOID_blkGrp == GEOID)) %>%
+    st_as_sf() %$%
+        {leaflet(.) %>%
+        addProviderTiles(providers$CartoDB.Positron) %>% 
+        addPolygons(
+            fillColor = ~ colorNumeric("Blues", nPer100People)(nPer100People),
+            fillOpacity = 0.7,
+            weight = 0,
+            highlightOptions = highlightOptions(
+                color = "Black",
+                fillOpacity = 1,
+                bringToFront = T),
+            label = str_glue_data(., "<strong>{GEOID_blkGrp}</strong><br>Tests per 100 People: {round(nPer100People,2)}<br/>") %>% 
+                    map(htmltools::HTML),
+            labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "12px",
+                direction = "auto")
+        ) %>%
+        addLegend(
+            pal = colorNumeric("Blues", nPer100People),
+            values = nPer100People,
+            opacity = 0.7,
+            title = "Tests per 100 People <br>By Block Group",
+            position = "topright",
+            na.label = "Insufficient Data"
+        )} %>%
+        htmlwidgets::prependContent(htmltools::tags$style(type = "text/css", "div.info.legend.leaflet-control br {clear: both;}"))
+```
+
+## Tests Per Person by Tract
+```{r}
+#| fig-height: 10
+
+data %>%
+    group_by(GEOID_tract) %>%
+    summarize(
+        nPer100People = 100 *sum(PB_nTests, na.rm = TRUE) / population_tractE[1]
+    ) %>% 
+    left_join(tracts(state = "IL", county = "Cook", progress_bar = FALSE), join_by(GEOID_tract == GEOID)) %>%
+    st_as_sf() %$%
+        {leaflet(.) %>%
+        addProviderTiles(providers$CartoDB.Positron) %>% 
+        addPolygons(
+            fillColor = ~ colorNumeric("Blues", nPer100People)(nPer100People),
+            fillOpacity = 0.7,
+            weight = 0,
+            highlightOptions = highlightOptions(
+                color = "Black",
+                fillOpacity = 1,
+                bringToFront = T),
+            label = str_glue_data(., "<strong>{GEOID_tract}</strong><br>Tests per 100 People: {round(nPer100People,2)}<br/>") %>% 
+                    map(htmltools::HTML),
+            labelOptions = labelOptions(
+                style = list("font-weight" = "normal", padding = "3px 8px"),
+                textsize = "12px",
+                direction = "auto")
+        ) %>%
+        addLegend(
+            pal = colorNumeric("Blues", nPer100People),
+            values = nPer100People,
+            opacity = 0.7,
+            title = "Tests per 100 People <br>By Tract",
+            position = "topright",
+            na.label = "Insufficient Data"
+        )} %>%
+        htmlwidgets::prependContent(htmltools::tags$style(type = "text/css", "div.info.legend.leaflet-control br {clear: both;}"))
+```
+:::
+
+::: panel-tabset
+
+## Positive Test Percentage by Mean Building Age
+```{r}
+data %>%
+    group_by(GEOID_tract) %>%
+    summarize(
+        bldAge_mean = sum(bldAge_mean * bld_number, na.rm = TRUE)/sum(bld_number, na.rm = TRUE),
+        PB_gt1Pct = sum(PB_gt1Pct * PB_nTests, na.rm = TRUE)/sum(PB_nTests, na.rm = TRUE)
+    ) %>% 
+    ggplot(aes(x = bldAge_mean, y = PB_gt1Pct)) +
+        geom_point(color = "steelblue1") +
+        labs(
+            title = "Mean Building Age vs Percent of Tests with Greater than 1 \nPPB Lead Detected by Tract",
+            x = "Mean Building Age (years)",
+            y = "Tests with Greater than 1 PPB Lead Detected (%)") +
+        scale_y_continuous(labels = scales::percent) +
+        theme(
+            plot.title = element_text(hjust = 0.5),
+            legend.position="none"
+        )
+```
+
+## Positive Test Percentage by Percent Built Before 1986
+```{r}
+data %>%
+    group_by(GEOID_tract) %>%
+    summarize(
+        bldAge_nBfr86 = 1-((sum(bldAge_nAft86, na.rm = TRUE))/sum(bld_number, na.rm = TRUE)),
+        PB_gt1Pct = sum(PB_gt1Pct * PB_nTests, na.rm = TRUE)/sum(PB_nTests, na.rm = TRUE)
+    ) %>% 
+    ggplot(aes(x = bldAge_nBfr86, y = PB_gt1Pct)) +
+        geom_point(color = "steelblue1") +
+        labs(
+            title = "Percent of Buildings built after 1986 vs Percent of Tests with \nGreater than 1 PPB Lead Detected by Tract",
+            x = "Buildings built after 1986 (%)",
+            y = "Tests with Greater than 1 PPB Lead Detected (%)") +
+        scale_x_continuous(labels = scales::percent) +
+        scale_y_continuous(labels = scales::percent) +
+        theme(
+            plot.title = element_text(hjust = 0.5),
+            legend.position="none"
+        )
+```
+:::
+
+```{r}
+#| fig-height: 10
+#| fig-width: 10
+
+data %>%
+    select(where(is.numeric)) %>%
+    select(where(function(x) sum(!is.na(x)) != 0)) %>%
+    select(where(function(x) var(x, na.rm = TRUE) != 0)) %>% 
+    correlate(method = "spearman") %>%
+    autoplot()
+```
+
+## Modeling
+
+
+```{r}
+tidymodels_prefer()
+```
+
+#### Creating Test/Training Data
+
+```{r}
+set.seed(345) 
+model_fitting_data <- data %>%
+    mutate(PB_nTests = 
+        case_when(
+            is.na(PB_nTests) ~ 5,
+            .default = PB_nTests
+        )
+    ) %>%
+    filter(!is.na(PB_majoritygt1)) %>%
+    mutate(PB_majoritygt1 = as.factor(PB_majoritygt1)) %>%
+    filter(GEOID_CA == "22") %>%
+    select(-PB_gt1Pct, -GEOID_blk, -GEOID_CA)
+
+split <- initial_split(model_fitting_data, strata = PB_majoritygt1)
+train <- training(split)
+test  <- testing(split)
+
+set.seed(456) 
+resamples <- vfold_cv(train, v = 5, strata = PB_majoritygt1)
+```
+
+#### Creating Our Recipes
+
+```{r}
+default_recipe <- model_fitting_data %>%    
+    recipe(PB_majoritygt1 ~ .) %>%   
+    step_novel(all_nominal_predictors()) %>%   
+    step_dummy(all_nominal_predictors()) %>%
+    step_zv(all_predictors()) %>%
+    step_smote(all_outcomes())
+
+normalized_recipe <- default_recipe %>%
+    step_normalize(all_predictors())
+```
+
+#### Creating Our Models
+
+```{r}
+logistic_class_spec <- 
+    logistic_reg(penalty = tune(), mixture = tune()) %>% 
+    set_engine("glmnet") %>% 
+    set_mode("classification")
+
+lightGBM_class_spec <- 
+    boost_tree(tree_depth = tune(), learn_rate = tune(), loss_reduction = tune(), min_n = tune(), sample_size = tune(), trees = tune()) %>%
+    set_engine("lightgbm") %>%
+    set_mode("classification")
+
+rf_class_spec <- 
+  rand_forest(mtry = tune(), min_n = tune(), trees = 1000) %>% 
+  set_engine("ranger") %>% 
+  set_mode("classification")
+```
+
+#### Creating Workflow
+
+```{r}
+normalized <- workflow_set(
+    preproc = list(normalized = normalized_recipe),
+    models = list(logistic = logistic_class_spec))
+
+no_pre_proc <- workflow_set(
+    preproc = list(simple = default_recipe), 
+    models = list(RF = rf_class_spec, boosting = lightGBM_class_spec))
+```
+
+```{r}
+all_workflows <- bind_rows(no_pre_proc, normalized)
+```
+
+#### Tune Model
+
+```{r}
+conflicted::conflicts_prefer(purrr::flatten)
+conflicted::conflicts_prefer(purrr::set_names)
+
+grid_results <- all_workflows %>%
+  workflow_map(
+    "tune_race_anova",
+    seed = 567,
+    resamples = resamples,
+    grid = 30,
+    control = control_race(
+      save_pred = FALSE,
+      save_workflow = FALSE,
+      parallel_over = "everything"))
+```
+
+```{r}
+autoplot(grid_results)
+```
+
+#### Select Best Model
+
+```{r}
+conflicted::conflicts_prefer(dplyr::filter)
+
+best_wf <- grid_results %>% 
+    rank_results() %>%
+    filter(.metric == "roc_auc", rank == 1) %>%
+    pull(wflow_id)
+
+best_results <- grid_results %>%
+    extract_workflow_set_result(best_wf) %>% 
+    select_best(metric = "roc_auc") 
+
+best_results_fit <- 
+    grid_results %>% 
+    extract_workflow(best_wf) %>%
+    finalize_workflow(best_results) %>% 
+    last_fit(split = split)
+```
+
+
+```{r}
+bayes_results <- grid_results %>% 
+    extract_workflow(best_wf) %>%
+    tune_bayes(
+        resamples = resamples,
+        initial = 20,
+        iter = 25,
+        control = control_bayes(verbose = TRUE)
+    )
+```
+
+
+```{r}
+bayes_results %>%
+  show_best(metric = "roc_auc") %>% 
+  knitr::kable()
+```
+
+
+```{r}
+final_fit <- grid_results %>% 
+    extract_workflow(best_wf) %>%
+    finalize_workflow(select_best(bayes_results, metric = "roc_auc")) %>% 
+    last_fit(split = split)
+```
+
+
+```{r}
+final_fit %>%
+    collect_predictions() %>%
+    roc_curve(PB_majoritygt1, .pred_FALSE) %>%
+    autoplot()
+```
+
+```{r}
+final_fit %>% 
+    collect_metrics() %>%
+    knitr::kable()
+```
+
+
+```{r}
+final_fit %>%
+    collect_predictions() %>%
+    conf_mat(PB_majoritygt1, .pred_class) %>%
+    autoplot(type = "heatmap")
 ```
