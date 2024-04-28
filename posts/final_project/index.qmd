@@ -57,6 +57,88 @@ references:
   ISSN: 2168-6211
   PMCID: PMC10949143
   PMID: '38497944'
+
+- id: mccormick_revealed:_2022
+  type: article-journal
+  author:
+  - family: McCormick
+    given: Erin
+  - family: Uteuova
+    given: Aliya
+  - family: Moore
+    given: Taylor
+  - family: Davis
+    given: Taylor Moore with photographs by Jamie Kelter
+  issued:
+  - year: 2022
+    month: 9
+  accessed:
+  - year: 2024
+    month: 4
+    day: 27
+  title: 'Revealed: the ‘shocking’ levels of toxic lead in Chicago tap water'
+  title-short: Revealed
+  container-title: The Guardian
+  chapter-number: US news
+  abstract: Tests performed for thousands of Chicago residents found lead, a neurotoxic
+    metal, in amounts far exceeding the federal standards
+  keyword: Chicago, Illinois, US news, Water
+  URL: https://www.theguardian.com/us-news/2022/sep/21/lead-contamination-chicago-tap-water-revealed
+  ISSN: 0261-3077
+
+- id: us_epa_use_2015
+  type: no-type
+  author:
+  - family: US EPA
+    given: OW
+  issued:
+  - year: 2015
+    month: 8
+  accessed:
+  - year: 2024
+    month: 4
+    day: 27
+  title: Use of Lead Free Pipes, Fittings, Fixtures, Solder, and Flux for Drinking
+    Water
+  genre: Overviews and Factsheets
+  abstract: Learn about regulations to implement the Section 1417 of the Safe Drinking
+    Water Act prohibiting the use of lead in plumbing components.
+  URL: https://www.epa.gov/sdwa/use-lead-free-pipes-fittings-fixtures-solder-and-flux-drinking-water
+
+- id: mccormick_profiting_2022
+  type: article-journal
+  author:
+  - family: McCormick
+    given: Erin
+  - family: Uteuova
+    given: Aliya
+  issued:
+  - year: 2022
+    month: 9
+  accessed:
+  - year: 2024
+    month: 4
+    day: 28
+  title: 'Profiting from poison: how the US lead industry knowingly created a water
+    crisis'
+  title-short: Profiting from poison
+  container-title: The Guardian
+  chapter-number: US news
+  abstract: The lead water crisis facing Chicago and many other US cities today has
+    roots in a nearly century-old campaign to boost the lead industry’s sales
+  keyword: Water, Environment, US news
+  URL: https://www.theguardian.com/us-news/2022/sep/22/us-lead-industry-history-water-crisis
+  ISSN: 0261-3077
+
+- id: noauthor_water_nodate
+  type: no-type
+  accessed:
+  - year: 2024
+    month: 4
+    day: 28
+  title: Water Service Line Inventory
+  note: 'publisher: Chicago Department of Water Management'
+  URL: https://sli.chicagowaterquality.org/
 ---
 
 ## Introduction
@@ -210,8 +292,8 @@ Libraries
 ```{r}
 library(bonsai)
 library(corrr)
+library(doMC)
 library(finetune)
-library(future)
 library(httr2)
 library(jsonlite)
 library(leaflet)
@@ -347,7 +429,7 @@ tract_data <- get_acs(geography = "tract", variables = tract_vars, state = "IL",
 ```
 
 #### Process
-Join datasets and utilize multiple imputation by chained equations with random forest as the regression model.
+Join datasets and utilize multiple imputation by chained equations with random forest as the regression model. Calculate total youth demographics by adding male and female.
 ```{r}
 #| eval: false
 
@@ -442,6 +524,7 @@ chicagoPbTest <- read_excel(path = pb_test_path, skip = 2, sheet = 1)
 
 
 #### Process
+Join testing data to the bulding with the same address (avoiding geocoding). This step does end up yielding a lower success rate of tying tests to blocks, but was a shortcut necessary to achieve this project within a more reasonable time frame.
 ```{r}
 #| eval: false
 
@@ -491,6 +574,8 @@ chicagoPbBlk <- chicagoPbTest %>%
 
 ### Chicago Health Atlas
 
+#### Download
+Download relevant data at the tract and community area level.
 ```{r}
 #| eval: false
 
@@ -511,6 +596,11 @@ chicagoHAPbCA <- request("https://chicagohealthatlas.org/api/action/download/") 
     req_perform() %>%
     resp_body_string() %>%
     {read_csv(., col_names = names(read_csv(., n_max = 0)), cols(GEOID = "c"), skip = 2)}
+```
+
+Spatially join census blocks to the community area Chicago Health Atlas data by joining block to those community areas that cover them the most. Join the tract data and drop the standard errors.
+```{r}
+#| eval: false
 
 chicagoHAblk <- chicagoBlocks %>%
     st_join(
@@ -529,7 +619,7 @@ chicagoHAblk <- chicagoBlocks %>%
 ### Chicago Service Line Inventory
 
 #### Download
-Not currently implemented due to time constraints. This an additional data source that I am contemplating using.
+Not currently implemented due to time constraints. This an additional data source that I am contemplating using. I also felt bad about the prospect of sending many thousands of api calls to a server that probably would not be expecting it.
 ```{r}
 #| eval: false
 
@@ -622,6 +712,8 @@ save(data, file = "../data/lead_data.RData")
 ```{r}
 #| include: false
 
+# setwd("/home/user/Documents/PA470/posts/final_project")
+
 load("../data/lead_data.RData")
 ```
 
@@ -630,6 +722,7 @@ load("../data/lead_data.RData")
 Tracts that test more tend to have a higher percent of water tests with greater than 1 PPB lead even when adjusting for population size. 
 
 ::: panel-tabset
+
 ## Lead Positive Percentage by Number of Tests
 ```{r}
 data %>%
@@ -674,9 +767,10 @@ data %>%
             legend.position="none"
         )
 ```
+
 :::
 
-We can see that residents on the north side have disproportionately low positive lead rates when compared to that of the rest of Chicago
+We can see that residents on the north side have disproportionately low positive lead rates when compared to that of the rest of Chicago. This comes as no suprise. A prior analysis published within the Guardian found that "nine of the top 10 zip codes with the largest percentages of high test results were neighborhoods with majorities of Black and Hispanic residents." @mccormick_revealed:_2022 
 
 ::: panel-tabset
 ## Positive Test Percentage by Block Group
@@ -810,6 +904,8 @@ data %>%
 
 :::
 
+Those areas with the highest tests per population rates seem to fall within the community areas of Beverly, Hyde Park, Forest Glen, and Lincoln Square, but there doesn't seem to be a clear discerable reason for the higher rates within these communities.
+
 ::: panel-tabset
 ## Tests Per Person by Block Group
 ```{r}
@@ -890,8 +986,11 @@ data %>%
 ```
 :::
 
-::: panel-tabset
+When looking at the percentage of tests with greater than 1 PPB lead at the tract level, there doesn't seem to be a clear association with mean building age. 
 
+It important to note that within the Chicago, city code mandated that lead service that "any pipe 2 in or less in diameter connecting a home to the water system *had* to be lead" @mccormick_profiting_2022 until the 1986 ammendment of the Safe Drinking Water Act prohibiting the use of non lead-free pipes, solder or flux in water systems intended for human consumption @us_epa_use_2015. This ammendment stopped short of prohibiting those lead pipes already in the ground. This means that to this day Chicago still has over 400,000 lead service lines @noauthor_water_nodate, which can quite accurately be identified by simply looking at the age of a home. We can see that when looking at the percentage of tests with greater than 1 PPB lead at the tract level, it seems to be almost bounded by the percent of buildings built before 1986.
+
+::: panel-tabset
 ## Positive Test Percentage by Mean Building Age
 ```{r}
 data %>%
@@ -936,6 +1035,7 @@ data %>%
 ```
 :::
 
+There is seems to be a considerable amount of multicolinearity, so we should pick a model that accounts for that.
 ```{r}
 #| fig-height: 10
 #| fig-width: 10
@@ -950,13 +1050,13 @@ data %>%
 
 ## Modeling
 
-
+### Assessing Various Models
 ```{r}
 tidymodels_prefer()
 ```
 
 #### Creating Test/Training Data
-
+I subset the testing data to the to the community areas within the West Side to reduce the amount of time necessary to fit the models. I also will not fit a lightGBM model because of time constraints. I also set the number of tests at 5 for all blocks without testing data, so that the model will predict whether 3 or more out of the 5 theoretical tests would be positive for lead above 1 ppb.
 ```{r}
 set.seed(345) 
 model_fitting_data <- data %>%
@@ -968,8 +1068,8 @@ model_fitting_data <- data %>%
     ) %>%
     filter(!is.na(PB_majoritygt1)) %>%
     mutate(PB_majoritygt1 = as.factor(PB_majoritygt1)) %>%
-    filter(GEOID_CA == "22") %>%
-    select(-PB_gt1Pct, -GEOID_blk, -GEOID_CA)
+    filter(GEOID_CA %in% as.character(23:31)) %>%
+    select(-PB_gt1Pct, -GEOID_blk, -GEOID_blkGrp)
 
 split <- initial_split(model_fitting_data, strata = PB_majoritygt1)
 train <- training(split)
@@ -980,27 +1080,26 @@ resamples <- vfold_cv(train, v = 5, strata = PB_majoritygt1)
 ```
 
 #### Creating Our Recipes
-
 ```{r}
 default_recipe <- model_fitting_data %>%    
     recipe(PB_majoritygt1 ~ .) %>%   
     step_novel(all_nominal_predictors()) %>%   
     step_dummy(all_nominal_predictors()) %>%
     step_zv(all_predictors()) %>%
-    step_smote(all_outcomes())
+    step_smote(PB_majoritygt1)
 
 normalized_recipe <- default_recipe %>%
     step_normalize(all_predictors())
 ```
 
 #### Creating Our Models
-
 ```{r}
 logistic_class_spec <- 
     logistic_reg(penalty = tune(), mixture = tune()) %>% 
     set_engine("glmnet") %>% 
     set_mode("classification")
 
+# We're not going to use light GBM because it just takes too long to fit.
 lightGBM_class_spec <- 
     boost_tree(tree_depth = tune(), learn_rate = tune(), loss_reduction = tune(), min_n = tune(), sample_size = tune(), trees = tune()) %>%
     set_engine("lightgbm") %>%
@@ -1013,7 +1112,6 @@ rf_class_spec <-
 ```
 
 #### Creating Workflow
-
 ```{r}
 normalized <- workflow_set(
     preproc = list(normalized = normalized_recipe),
@@ -1021,7 +1119,7 @@ normalized <- workflow_set(
 
 no_pre_proc <- workflow_set(
     preproc = list(simple = default_recipe), 
-    models = list(RF = rf_class_spec, boosting = lightGBM_class_spec))
+    models = list(RF = rf_class_spec))
 ```
 
 ```{r}
@@ -1029,10 +1127,12 @@ all_workflows <- bind_rows(no_pre_proc, normalized)
 ```
 
 #### Tune Model
-
+I encountered some weird errors about conflicted function names, so I included some code to fix those issues.
 ```{r}
 conflicted::conflicts_prefer(purrr::flatten)
 conflicted::conflicts_prefer(purrr::set_names)
+
+registerDoMC(cores = 8)
 
 grid_results <- all_workflows %>%
   workflow_map(
@@ -1043,15 +1143,18 @@ grid_results <- all_workflows %>%
     control = control_race(
       save_pred = FALSE,
       save_workflow = FALSE,
-      parallel_over = "everything"))
+      verbose = TRUE))
 ```
 
+We can see that of our two models, the random forest model tends to yield the lowest AUC.
 ```{r}
 autoplot(grid_results)
 ```
 
-#### Select Best Model
+### Tune Best Model
 
+#### Select Best Model
+A known bug in the `tune_bayes` function means that I have to pass the parameter range for mtry for random forest instead of it automatically finalizing that range.
 ```{r}
 conflicted::conflicts_prefer(dplyr::filter)
 
@@ -1059,31 +1162,33 @@ best_wf <- grid_results %>%
     rank_results() %>%
     filter(.metric == "roc_auc", rank == 1) %>%
     pull(wflow_id)
-
-best_results <- grid_results %>%
-    extract_workflow_set_result(best_wf) %>% 
-    select_best(metric = "roc_auc") 
-
-best_results_fit <- 
-    grid_results %>% 
-    extract_workflow(best_wf) %>%
-    finalize_workflow(best_results) %>% 
-    last_fit(split = split)
 ```
 
 
 ```{r}
+if (best_wf == "simple_RF") {
+    rf_param <- grid_results %>% 
+        extract_workflow(best_wf) %>%
+        extract_parameter_set_dials() %>%
+        update(mtry = 
+            default_recipe %>%
+                prep() %>%
+                bake(train) %>%
+                finalize(mtry(), .))
+}
+
 bayes_results <- grid_results %>% 
     extract_workflow(best_wf) %>%
     tune_bayes(
         resamples = resamples,
         initial = 20,
         iter = 25,
+        param_info = case_when(best_wf == "simple_RF" ~ rf_param, .default = NULL),
         control = control_bayes(verbose = TRUE)
     )
 ```
 
-
+Let's look at some of the iterations. Seems like we're getting similar AUC values as within the study!
 ```{r}
 bayes_results %>%
   show_best(metric = "roc_auc") %>% 
@@ -1106,16 +1211,39 @@ final_fit %>%
     autoplot()
 ```
 
+In our final fit, we got a slightly lower AUC, but not so low that I would start to suspect overfitting. I am quite happy with this model considering I am only working with a fraction of the data.
 ```{r}
 final_fit %>% 
     collect_metrics() %>%
     knitr::kable()
 ```
 
-
+Due to the unbalanced nature of our data, the model is better at predicting blocks that have a majority of tests with greater than 1 ppb lead detected. Synthetic Minority Over-sampling TEchnique (SMOTE) was used within the preprocessing to try to help address this problem, but it seems that the problem remains.
 ```{r}
 final_fit %>%
     collect_predictions() %>%
     conf_mat(PB_majoritygt1, .pred_class) %>%
     autoplot(type = "heatmap")
 ```
+
+Unsurprisingly, our most important variable within our model is the number of homes built after 1986 and the ercent of children ages 1-5 with blood lead level at or above 5 micrograms per deciliter. Interestingly, the percent asian non-hispanic at the block, block group, and tract levels are all within the top ten most important variables. This would be something to look into in the future. The number of tests is also an important factor, which was also expected, although it muddies some of the interpretability of the predictions.
+```{r}
+vip_rf_spec <- rand_forest(mtry = tune(), trees = 1000, min_n = tune()) %>% 
+    set_engine("ranger", importance = "impurity") %>% 
+    set_mode("classification")
+
+vip_rf <- finalize_model(vip_rf_spec, select_best(bayes_results, metric = "roc_auc"))  
+vip_wf <- workflow() %>%   
+  add_recipe(default_recipe) %>%   
+  add_model(vip_rf) 
+
+vip_rf_fit <- vip_wf %>%    
+  fit(train)
+
+vip_rf_fit %>% 
+    extract_fit_parsnip() %>% 
+    vip::vip(geom = "point")
+```
+
+## Conclusion
+All in all, I am pretty happy with the end product of this project. Although I was not able to create a model for the entire city or utilize lightGBM, it seems that my model does a similar job to the model published within the Huynh et al. even if it is within a more limited area. I am definitely interested in looking more into this data, especially considering the work I put into combining all these disparate data sources (hopefully, when I gain access to some high powered computing resources). Thank you for the semester!

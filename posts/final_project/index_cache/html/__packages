@@ -40,3 +40,6 @@ lightgbm
 Matrix
 glmnet
 rlang
+foreach
+iterators
+doMC
